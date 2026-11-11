@@ -1,0 +1,156 @@
+name: Daily Branch Sync
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Every day at midnight UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Delete old Dependabot branches
+        run: |
+          echo "Deleting Dependabot branches older than 1 day..."
+          
+          ONE_DAY_AGO=$(date -d "1 day ago" +%s 2>/dev/null || date -v-1d +%s)
+          
+          for branch in $(git branch -r | grep 'dependabot/' | sed 's|origin/||'); do
+            BRANCH_DATE=$(git log -1 --format=%ct origin/$branch)
+            
+            if [ "$BRANCH_DATE" -lt "$ONE_DAY_AGO" ]; then
+              echo "Deleting branch: $branch (created $(date -r $BRANCH_DATE))"
+              git push origin --delete $branch || echo "Failed to delete $branch"
+            else
+              echo "Keeping branch: $branch (created $(date -r $BRANCH_DATE))"
+            fi
+          done
+
+      - name: Auto-merge Dependabot PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Auto-merging Dependabot PRs..."
+          
+          # Get all open Dependabot PRs
+          PRS=$(gh pr list --author "app/dependabot" --state open --json number --jq '.[].number' || echo "")
+          
+          if [ -n "$PRS" ]; then
+            for pr in $PRS; do
+              echo "Auto-merging Dependabot PR #$pr"
+              gh pr merge $pr --auto --merge || echo "Failed to auto-merge PR #$pr"
+            done
+          else
+            echo "No open Dependabot PRs found"
+          fi
+
+      - name: Check main vs develop
+        id: check-main-develop
+        run: |
+          echo "Checking if main has commits not in develop..."
+          
+          git fetch origin main develop
+          
+          if git rev-parse --verify origin/develop >/dev/null 2>&1; then
+            # develop exists, check for commits
+            NEW_COMMITS=$(git log origin/develop..origin/main --oneline | wc -l)
+            
+            if [ "$NEW_COMMITS" -gt 0 ]; then
+              echo "has_new_commits=true" >> $GITHUB_OUTPUT
+              echo "commit_count=$NEW_COMMITS" >> $GITHUB_OUTPUT
+              echo "Found $NEW_COMMITS commits in main not in develop"
+            else
+              echo "has_new_commits=false" >> $GITHUB_OUTPUT
+              echo "No new commits in main"
+            fi
+          else
+            echo "has_new_commits=false" >> $GITHUB_OUTPUT
+            echo "develop branch does not exist"
+          fi
+
+      - name: Create PR main -> develop
+        if: steps.check-main-develop.outputs.has_new_commits == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Creating PR from main to develop..."
+          
+          TITLE="sync: Merge main to develop"
+          BODY="Automated sync PR to bring main commits to develop.\n\nThis PR contains ${{ steps.check-main-develop.outputs.commit_count }} commits from main."
+          
+          # Check if PR already exists
+          EXISTING_PR=$(gh pr list --base develop --head main --state open --json number --jq '.[0].number' || echo "")
+          
+          if [ -n "$EXISTING_PR" ]; then
+            echo "PR already exists: #$EXISTING_PR"
+            gh pr merge $EXISTING_PR --auto --merge || echo "Failed to auto-merge PR"
+          else
+            PR_NUMBER=$(gh pr create --base develop --head main --title "$TITLE" --body "$BODY" --json number --jq '.number' || echo "")
+            if [ -n "$PR_NUMBER" ]; then
+              echo "Created PR #$PR_NUMBER, auto-merging..."
+              gh pr merge $PR_NUMBER --auto --merge || echo "Failed to auto-merge PR"
+            fi
+          fi
+
+      - name: Get all branches except main and dependabot
+        id: get-branches
+        run: |
+          echo "Getting branches to sync from develop..."
+          
+          BRANCHES=$(git branch -r | grep -v 'origin/main' | grep -v 'origin/dependabot/' | grep -v 'origin/HEAD' | sed 's|origin/||' | tr '\n' ',')
+          
+          echo "branches=$BRANCHES" >> $GITHUB_OUTPUT
+          echo "Branches to sync: $BRANCHES"
+
+      - name: Sync develop to other branches
+        if: steps.get-branches.outputs.branches != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IFS=',' read -ra BRANCH_ARRAY <<< "${{ steps.get-branches.outputs.branches }}"
+          
+          for branch in "${BRANCH_ARRAY[@]}"; do
+            if [ -n "$branch" ]; then
+              echo "Checking branch: $branch"
+              
+              # Check if branch still exists
+              if git rev-parse --verify origin/$branch >/dev/null 2>&1; then
+                # Check for new commits in develop
+                NEW_COMMITS=$(git log origin/$branch..origin/develop --oneline | wc -l)
+                
+                if [ "$NEW_COMMITS" -gt 0 ]; then
+                  echo "Creating PR from develop to $branch ($NEW_COMMITS commits)"
+                  
+                  TITLE="sync: Merge develop to $branch"
+                  BODY="Automated sync PR to bring develop commits to $branch.\n\nThis PR contains $NEW_COMMITS commits from develop."
+                  
+                  # Check if PR already exists
+                  EXISTING_PR=$(gh pr list --base $branch --head develop --state open --json number --jq '.[0].number' || echo "")
+                  
+                  if [ -n "$EXISTING_PR" ]; then
+                    echo "PR already exists: #$EXISTING_PR, auto-merging..."
+                    gh pr merge $EXISTING_PR --auto --merge || echo "Failed to auto-merge PR"
+                  else
+                    PR_NUMBER=$(gh pr create --base $branch --head develop --title "$TITLE" --body "$BODY" --json number --jq '.number' || echo "")
+                    if [ -n "$PR_NUMBER" ]; then
+                      echo "Created PR #$PR_NUMBER, auto-merging..."
+                      gh pr merge $PR_NUMBER --auto --merge || echo "Failed to auto-merge PR"
+                    fi
+                  fi
+                else
+                  echo "No new commits in develop for $branch"
+                fi
+              else
+                echo "Branch $branch no longer exists, skipping"
+              fi
+            fi
+          done

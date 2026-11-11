@@ -1,0 +1,228 @@
+name: Repository Initialization
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip:
+        description: 'Skip issue creation (for testing)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  initialization:
+    runs-on: ubuntu-latest
+    if: inputs.skip != 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Detect repository structure
+        id: detect
+        run: |
+          echo "detecting structure..."
+          
+          # Detect Cloudflare Workers
+          if [ -f "wrangler.toml" ]; then
+            echo "has_workers=true" >> $GITHUB_OUTPUT
+            WORKER_NAME=$(grep '^name = ' wrangler.toml | head -1 | sed 's/name = //; s/"//g')
+            echo "worker_name=$WORKER_NAME" >> $GITHUB_OUTPUT
+          else
+            echo "has_workers=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Detect CI workflow
+          if [ -f ".github/workflows/ci.yml" ]; then
+            echo "has_ci=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_ci=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Detect frontend
+          if [ -d "src/frontend" ]; then
+            echo "has_frontend=true" >> $GITHUB_OUTPUT
+            FRONTEND_DIRS=$(find src/frontend -maxdepth 1 -type d -not -path "src/frontend" | xargs -I {} basename {} | tr '\n' ',' | sed 's/,$//')
+            echo "frontend_dirs=$FRONTEND_DIRS" >> $GITHUB_OUTPUT
+          else
+            echo "has_frontend=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Detect backend
+          if [ -d "src/backend" ]; then
+            echo "has_backend=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_backend=false" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "detection completed"
+
+      - name: Copy repository settings from template
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Copying repository settings from template..."
+          
+          TEMPLATE_REPO="${{ github.repository_owner }}/repository-template"
+          CURRENT_REPO="${{ github.repository }}"
+          
+          # Copy topics only (simple and reliable)
+          echo "Copying topics..."
+          TOPICS=$(gh repo view $TEMPLATE_REPO --json repositoryTopics --jq '.repositoryTopics.nodes[].topic.name' | tr '\n' ' ')
+          if [ -n "$TOPICS" ]; then
+            echo "Setting topics: $TOPICS"
+            gh repo edit $CURRENT_REPO --add-topic "$TOPICS" || echo "Failed to set topics"
+          fi
+          
+          echo "Repository settings copied successfully"
+
+      - name: Create initialization issue
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const repo = context.repo.repo;
+            const owner = context.repo.owner;
+            const fullName = owner + '/' + repo;
+            
+            const hasWorkers = '${{ steps.detect.outputs.has_workers }}' === 'true';
+            const hasCI = '${{ steps.detect.outputs.has_ci }}' === 'true';
+            const hasFrontend = '${{ steps.detect.outputs.has_frontend }}' === 'true';
+            const hasBackend = '${{ steps.detect.outputs.has_backend }}' === 'true';
+            const workerName = '${{ steps.detect.outputs.worker_name }}';
+            const frontendDirs = '${{ steps.detect.outputs.frontend_dirs }}';
+            
+            let body = '# Repository Initialization Complete\n\n';
+            body += 'Repository: ' + fullName + '\n\n';
+            body += 'This repository has been successfully initialized from the template. Repository settings have been automatically copied from the template.\n\n';
+            body += '## Repository Structure\n\n';
+            
+            if (hasFrontend) {
+              body += '### Frontend Architecture\n';
+              body += '- src/frontend/ - Frontend application structure\n';
+              body += 'Available directories: ' + frontendDirs + '\n\n';
+            }
+            
+            if (hasBackend) {
+              body += '### Backend Architecture\n';
+              body += '- src/backend/ - Backend feature modules\n';
+              body += 'Feature-based organization\n\n';
+            }
+            
+            if (hasWorkers) {
+              body += '## Cloudflare Workers Configuration\n\n';
+              body += 'Worker Name: ' + workerName + '\n';
+              body += 'Entry Point: src/index.js\n';
+              body += 'Assets: ./src/frontend\n\n';
+            }
+            
+            if (hasCI) {
+              body += '## CI/CD Pipeline\n\n';
+              body += 'Workflow: .github/workflows/ci.yml\n';
+              body += 'Triggers: Pull requests and pushes to main\n\n';
+            }
+            
+            body += '## Development Architecture\n\n';
+            body += 'This repository uses Trunk-Based Development. See ARCHITECTURE.md for complete details.\n\n';
+            
+            body += '## Manual Configuration Required\n\n';
+            body += '### Critical (Must Configure)\n\n';
+            body += '#### Repository Metadata\n';
+            body += '- [ ] Update repository description in Settings → General\n';
+            body += '- [ ] Add repository topics (keywords) in Settings → General\n';
+            body += '- [ ] Set repository visibility (public/private) in Settings → General\n';
+            body += '- [ ] Update README.md with project-specific information\n';
+            body += '- [ ] Add LICENSE file if required\n';
+            body += '- [ ] Update CODEOWNERS file with team members\n\n';
+            
+            body += '#### Team and Access Management\n';
+            body += '- [ ] Add collaborators/teams to repository in Settings → Collaborators\n';
+            body += '- [ ] Configure team permissions (read/write/admin)\n';
+            body += '- [ ] Set up CODEOWNERS for code review assignments\n\n';
+            
+            body += '#### Branch Protection (Settings → Rules → Rulesets)\n';
+            body += '- [ ] Create ruleset for main branch\n';
+            body += '- [ ] Require pull request before merging\n';
+            body += '- [ ] Require at least 1 approving review\n';
+            body += '- [ ] Require status checks to pass before merge\n';
+            body += '- [ ] Require branches to be up to date before merging\n';
+            body += '- [ ] Restrict direct pushes to main\n';
+            body += '- [ ] Configure required reviewers if needed\n\n';
+            
+            body += '#### Cloudflare Workers (if applicable)\n';
+            body += '- [ ] Update worker name in wrangler.toml\n';
+            body += '- [ ] Authenticate with Cloudflare: npx wrangler login\n';
+            body += '- [ ] Configure environment variables if needed\n';
+            body += '- [ ] Set up KV namespace if needed\n';
+            body += '- [ ] Configure R2 bucket if needed\n';
+            body += '- [ ] Set up D1 database if needed\n';
+            body += '- [ ] Configure custom domains\n';
+            body += '- [ ] Deploy to Cloudflare: npx wrangler deploy\n\n';
+            
+            body += '#### Important GitHub Settings\n';
+            body += '- [ ] Configure Actions permissions (Settings → Actions → General)\n';
+            body += '- [ ] Set workflow permissions to Read and write\n';
+            body += '- [ ] Allow GitHub Actions to create and approve pull requests\n';
+            body += '- [ ] Configure secret scanning settings (Settings → Security & Analysis)\n';
+            body += '- [ ] Enable Dependabot alerts and security updates\n';
+            body += '- [ ] Configure dependency graph settings\n';
+            body += '- [ ] Set up custom merge methods if needed\n\n';
+            
+            body += '### Important (Should Configure)\n\n';
+            body += '#### CI/CD Customization\n';
+            body += '- [ ] Add project-specific test commands in .github/workflows/ci.yml\n';
+            body += '- [ ] Configure linting rules and standards\n';
+            body += '- [ ] Set up security scanning tools\n';
+            body += '- [ ] Add deployment stages (staging, production)\n';
+            body += '- [ ] Configure notification settings\n\n';
+            
+            body += '#### Documentation\n';
+            body += '- [ ] Update CONTRIBUTING.md with contribution guidelines\n';
+            body += '- [ ] Add SECURITY.md with security policy\n';
+            body += '- [ ] Create issue templates in .github/ISSUE_TEMPLATE/\n';
+            body += '- [ ] Create PR template in .github/PULL_REQUEST_TEMPLATE.md\n';
+            body += '- [ ] Add CODE_OF_CONDUCT.md if needed\n\n';
+            
+            body += '#### Webhooks and Integrations\n';
+            body += '- [ ] Configure webhooks for external services\n';
+            body += '- [ ] Set up Slack/Discord notifications\n';
+            body += '- [ ] Configure project management integrations (Jira, Linear, etc.)\n';
+            body += '- [ ] Set up CI/CD notifications\n\n';
+            
+            body += '### Optional (Nice to Have)\n\n';
+            body += '#### Additional Features\n';
+            body += '- [ ] Enable GitHub Pages if documentation site needed\n';
+            body += '- [ ] Enable GitHub Discussions for community\n';
+            body += '- [ ] Configure GitHub Projects for task tracking\n';
+            body += '- [ ] Set up dependency review automation\n';
+            body += '- [ ] Configure merge queue for concurrent PRs\n';
+            body += '- [ ] Enable auto-merge for specific workflows\n\n';
+            
+            body += '#### Platform Links\n';
+            body += '- [ ] Add link to production platform in README\n';
+            body += '- [ ] Add monitoring/dashboard links\n';
+            body += '- [ ] Add documentation site link\n';
+            body += '- [ ] Add API documentation link\n\n';
+            
+            body += '## What Was Automatically Configured\n\n';
+            body += 'The following was automatically copied from the template:\n\n';
+            body += '- Repository topics (keywords)\n\n';
+            body += 'Note: Due to GitHub API limitations, most repository settings must be configured manually via the GitHub UI. The automated process only copies what is reliably possible via the API.\n\n';
+            
+            body += '## Resources\n\n';
+            body += '- [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)\n';
+            body += '- [GitHub Actions Documentation](https://docs.github.com/en/actions)\n';
+            body += '- [GitHub Branch Protection](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-branch-protection-rules)\n';
+            body += '- [Trunk-Based Development](https://trunkbaseddevelopment.com/)\n\n';
+            
+            body += 'Generated: ' + new Date().toISOString();
+            
+            github.rest.issues.create({
+              owner: owner,
+              repo: repo,
+              title: 'Repository Initialization Complete',
+              body: body,
+              labels: ['setup', 'admin']
+            });
