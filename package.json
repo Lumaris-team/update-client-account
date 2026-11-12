@@ -2,6 +2,7 @@
   "name": "repository-template",
   "version": "1.0.0",
   "description": "Cloudflare Workers repository template",
+  "type": "module",
   "packageManager": "npm@11.16.0",
   "engines": {
     "node": ">=20"
@@ -10,7 +11,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "echo \"Tests not configured yet\" && exit 0"
+    "test": "node --test"
   },
   "devDependencies": {
     "wrangler": "^4.156.0"

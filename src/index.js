@@ -1,25 +1,48 @@
-// API funtion
+import { updateWorkers } from "./worker-updater.js";
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const method = request.method;
-    const headers = request.headers
-    let body;
-    const contentType = request.headers.get('content-type') || '';
     const corsHeaders = {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, DELETE, PUT, PATCH, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "*"
     };
-    
+
+    if (method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    if (url.pathname === "/api/update-workers") {
+      if (method !== "POST") {
+        return new Response(JSON.stringify({ error: "Method not allowed" }), {
+          status: 405,
+          headers: { ...corsHeaders, Allow: "POST" },
+        });
+      }
+
+      try {
+        const results = await updateWorkers(env.CONFIGURATION, {
+          token: env.FULL_ACCESS_TOKEN,
+        });
+        return new Response(JSON.stringify({ results }), { headers: corsHeaders });
+      } catch (error) {
+        console.error("WORKER UPDATE ERROR:", error?.stack || error);
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: corsHeaders,
+        });
+      }
+    }
+
     // =========================
     // 📶 MAIN API
     // =========================
     if (url.pathname.startsWith("/api/")) {
       try {
-        let resp = {object: "nothing"};
-        // Return res111ponse
+        const resp = { object: "nothing" };
         return new Response(JSON.stringify({
           resp
         }), {
@@ -27,7 +50,6 @@ export default {
         })
       } catch (e) {
         console.error("API ERROR:", e?.stack || e);
-        // await sendErrorEmail(env, e, `API ${url.pathname}`);
         return new Response(JSON.stringify({
           error: e?.message,
         }), {
@@ -42,14 +64,13 @@ export default {
     // Add CORS headers for assets to allow browser loading
     if (url.pathname.startsWith("/assets/") && method==="GET") {
       const assetResponse = await env.ASSETS.fetch(request);
-      
+
       if (assetResponse.ok) {
-        // For SVG files, serve with correct content-type
-        const isSvg = url.pathname.endsWith('.svg');
-        const contentType = isSvg ? 'image/svg+xml; charset=utf-8' : (assetResponse.headers.get("Content-Type") || "application/octet-stream");
-        
         return new Response(assetResponse.body, {
-          headers: corsHeaders
+          headers: {
+            ...corsHeaders,
+            "Content-Type": assetResponse.headers.get("Content-Type") || "application/octet-stream",
+          }
         });
       }
       return assetResponse;
@@ -64,5 +85,16 @@ export default {
       return env.ASSETS.fetch(new Request(assetUrl, request));
     }
     return env.ASSETS.fetch(request)
-  }
-}
+  },
+
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(
+      updateWorkers(env.CONFIGURATION, {
+        token: env.FULL_ACCESS_TOKEN,
+      }).catch((error) => {
+        console.error("SCHEDULED WORKER UPDATE ERROR:", error?.stack || error);
+        throw error;
+      })
+    );
+  },
+};
