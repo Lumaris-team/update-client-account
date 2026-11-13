@@ -25,7 +25,9 @@ export default {
 
       try {
         const results = await updateWorkers(env.CONFIGURATION, {
-          token: env.FULL_ACCESS_TOKEN,
+          token: env.ACCESS_TOKEN,
+          githubToken: env.GITHUB_TOKEN,
+          accountId: env.CLOUDFLARE_ACCOUNT_ID,
         });
         return new Response(JSON.stringify({ results }), { headers: corsHeaders });
       } catch (error) {
@@ -90,7 +92,9 @@ export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(
       updateWorkers(env.CONFIGURATION, {
-        token: env.FULL_ACCESS_TOKEN,
+        token: env.ACCESS_TOKEN,
+        githubToken: env.GITHUB_TOKEN,
+        accountId: env.CLOUDFLARE_ACCOUNT_ID,
       }).catch((error) => {
         console.error("SCHEDULED WORKER UPDATE ERROR:", error?.stack || error);
         throw error;
