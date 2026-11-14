@@ -25,7 +25,7 @@ export default {
 
       try {
         const results = await updateWorkers(env.CONFIGURATION, {
-          token: env.ACCESS_TOKEN,
+          token: env.CLOUDFLARE_ACCOUNT_TOKEN,
           githubToken: env.GITHUB_TOKEN,
           accountId: env.CLOUDFLARE_ACCOUNT_ID,
         });
@@ -92,7 +92,7 @@ export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(
       updateWorkers(env.CONFIGURATION, {
-        token: env.ACCESS_TOKEN,
+        token: env.CLOUDFLARE_ACCOUNT_TOKEN,
         githubToken: env.GITHUB_TOKEN,
         accountId: env.CLOUDFLARE_ACCOUNT_ID,
       }).catch((error) => {

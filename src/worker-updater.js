@@ -301,7 +301,7 @@ export async function updateWorker(
   target,
   { token, githubToken, accountId, fetchImpl = fetch } = {}
 ) {
-  if (!token) throw new Error("ACCESS_TOKEN is not configured");
+  if (!token) throw new Error("CLOUDFLARE_ACCOUNT_TOKEN is not configured");
   target = { ...target, accountId: target.accountId || accountId };
   if (!target.accountId) throw new Error(`No Cloudflare account ID configured for ${target.name}`);
   const existed = await workerExists(target, token, fetchImpl);

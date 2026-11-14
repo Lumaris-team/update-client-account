@@ -16,7 +16,7 @@ Pour chaque cible, il :
 
 Définir les secrets/variables du Worker :
 
-- `ACCESS_TOKEN` : token API Cloudflare ayant les droits Workers nécessaires ;
+- `CLOUDFLARE_ACCOUNT_TOKEN` : token API Cloudflare ayant les droits Workers nécessaires ;
 - `CLOUDFLARE_ACCOUNT_ID` : compte Cloudflare par défaut ;
 - `GITHUB_TOKEN` : optionnel, uniquement nécessaire pour des dépôts privés.
 
