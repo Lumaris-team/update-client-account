@@ -260,6 +260,19 @@ function base64(bytes) {
   return btoa(encoded);
 }
 
+async function workerExists(target, token, fetchImpl) {
+  const response = await fetchImpl(
+    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.worker)}`,
+    { headers: cloudflareHeaders(token) }
+  );
+  if (response.ok) return true;
+  if (response.status === 404) return false;
+  const body = await response.text();
+  throw new Error(
+    `Cannot inspect Worker ${target.worker} (${response.status}): ${body.slice(0, 300)}`
+  );
+}
+
 async function uploadAssets(target, assets, token, fetchImpl) {
   if (!assets.length) return null;
   const manifest = Object.fromEntries(assets.map(({ path, bytes }) => [
@@ -291,6 +304,7 @@ export async function updateWorker(
   if (!token) throw new Error("ACCESS_TOKEN is not configured");
   target = { ...target, accountId: target.accountId || accountId };
   if (!target.accountId) throw new Error(`No Cloudflare account ID configured for ${target.name}`);
+  const existed = await workerExists(target, token, fetchImpl);
   const repository = await readRepository(target, githubToken, fetchImpl);
   target = {
     ...target,
@@ -315,7 +329,13 @@ export async function updateWorker(
     { method: "PUT", headers: cloudflareHeaders(token), body: form },
     fetchImpl
   );
-  return { name: target.name, status: "deployed", sha: repository.sha, worker: target.worker, result };
+  return {
+    name: target.name,
+    status: existed ? "updated" : "created",
+    sha: repository.sha,
+    worker: target.worker,
+    result,
+  };
 }
 
 export async function updateWorkers(

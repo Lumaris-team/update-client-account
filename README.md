@@ -9,7 +9,8 @@ Pour chaque cible, il :
 2. télécharge l'archive GitHub en une seule requête ;
 3. lit `wrangler.toml` et convertit ses bindings ;
 4. envoie les assets puis le script à l'API Cloudflare ;
-5. déploie immédiatement la nouvelle version.
+5. crée le Worker s'il n'existe pas, ou met à jour celui qui existe ;
+6. déploie immédiatement la nouvelle version.
 
 ## Configuration
 
@@ -40,7 +41,8 @@ Ou une configuration complète :
 }
 ```
 
-Le compte indiqué par `accountId` est prioritaire sur
+Le nom du Worker est la valeur `worker`, ou la clé JSON si `worker` n'est pas
+spécifié. Le compte indiqué par `accountId` est prioritaire sur
 `CLOUDFLARE_ACCOUNT_ID`. Les requêtes manuelles et le cron quotidien à 02:00
 UTC utilisent le même déploiement direct.
 
