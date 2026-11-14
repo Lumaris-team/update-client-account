@@ -168,6 +168,7 @@ async function requestJson(url, options = {}, fetchImpl = fetch) {
 function githubHeaders(token) {
   return {
     Accept: "application/vnd.github+json",
+    "User-Agent": "Lumaris-update-client-account",
     "X-GitHub-Api-Version": "2022-11-28",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
