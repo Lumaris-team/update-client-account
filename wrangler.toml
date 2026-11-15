@@ -6,7 +6,7 @@ workers_dev = true
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-CONFIGURATION = '{"update-client-account": "https://github.com/Lumaris-team/update-client-account.git", "client-worker": "https://github.com/Lumaris-team/client-worker"}'
+CONFIGURATION = '{"update-client-account": "https://github.com/Lumaris-team/update-client-account.git", "client-worker": "https://github.com/Lumaris-team/main-client-worker"}'
 
 [triggers]
 crons = ["0 2 * * *"]
