@@ -9,17 +9,6 @@ function dependencyVersion(version) {
   return version.replace(/^[~^<>=\s]*/g, "").split(" ")[0];
 }
 
-function relativeModulePath(from, to) {
-  const fromParts = from.split("/");
-  fromParts.pop();
-  const toParts = to.split("/");
-  while (fromParts.length && toParts.length && fromParts[0] === toParts[0]) {
-    fromParts.shift();
-    toParts.shift();
-  }
-  return `${"./".repeat(fromParts.length ? 0 : 1)}${"../".repeat(fromParts.length)}${toParts.join("/")}`;
-}
-
 async function bundleDependencies(contents, packageJson, fetchImpl) {
   const sourceFiles = [...contents.entries()]
     .filter(([path]) => DEPENDENCY_EXTENSIONS.has(path.slice(path.lastIndexOf("."))));
@@ -38,13 +27,16 @@ async function bundleDependencies(contents, packageJson, fetchImpl) {
     const bundlePath = entryText.match(/from ["'](\/[^"']+\.m?js)["']/)?.[1];
     const bundleResponse = await fetchImpl(bundlePath ? `https://esm.sh${bundlePath}` : entry.url);
     if (!bundleResponse.ok) throw new Error(`Cannot download npm bundle ${name} (${bundleResponse.status})`);
-    const dependencyPath = `__dependencies__/${name.replace(/[^A-Za-z0-9._-]/g, "_")}.mjs`;
-    contents.set(dependencyPath, new Uint8Array(await bundleResponse.arrayBuffer()));
+    const dependencyBytes = new Uint8Array(await bundleResponse.arrayBuffer());
+    const dependencyFile = name.replace(/[^A-Za-z0-9._-]/g, "_") + ".mjs";
     for (const [path, bytes] of sourceFiles) {
       const text = new TextDecoder().decode(bytes);
+      if (!new RegExp(`(?:from|import\\s*\\()\\s*["']${escapedName}["']`).test(text)) continue;
+      const directory = path.slice(0, path.lastIndexOf("/"));
+      const dependencyPath = `${directory}/${dependencyFile}`;
+      contents.set(dependencyPath, dependencyBytes);
       contents.set(path, new TextEncoder().encode(text.replace(
-        new RegExp(`(["'])${escapedName}\\1`, "g"),
-        `$1${relativeModulePath(path, dependencyPath)}$1`
+        new RegExp(`(["'])${escapedName}\\1`, "g"), `$1./${dependencyFile}$1`
       )));
     }
   }
