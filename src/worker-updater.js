@@ -20,10 +20,19 @@ export function parseRepositoryUrl(value) {
 }
 
 export function parseConfiguration(configuration) {
+  if (typeof configuration !== "string" || configuration.trim() === "") {
+    throw new Error("CONFIGURATION is missing or empty");
+  }
+
+  let source = configuration.trim().replace(/^\uFEFF/, "");
+  if (source.startsWith("'") && source.endsWith("'")) {
+    source = source.slice(1, -1);
+  }
+
   let parsed;
   try {
-    parsed = JSON.parse(configuration);
-    if (typeof parsed === "string") parsed = JSON.parse(parsed);
+    parsed = JSON.parse(source);
+    if (typeof parsed === "string") parsed = JSON.parse(parsed.trim());
   } catch {
     throw new Error("CONFIGURATION must contain valid JSON");
   }

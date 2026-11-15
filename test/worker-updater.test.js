@@ -39,6 +39,13 @@ test("parses configuration wrapped as a JSON string", () => {
   assert.equal(parseConfiguration(configuration)[0].repo, "one");
 });
 
+test("parses configuration including TOML single-quote delimiters", () => {
+  assert.equal(
+    parseConfiguration('\'{"worker1":"https://github.com/acme/one"}\'')[0].repo,
+    "one"
+  );
+});
+
 test("parses a complete deployment target", () => {
   assert.deepEqual(parseConfiguration(JSON.stringify({
     dashboard: {
