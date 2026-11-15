@@ -23,6 +23,7 @@ export function parseConfiguration(configuration) {
   let parsed;
   try {
     parsed = JSON.parse(configuration);
+    if (typeof parsed === "string") parsed = JSON.parse(parsed);
   } catch {
     throw new Error("CONFIGURATION must contain valid JSON");
   }
