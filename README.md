@@ -10,7 +10,8 @@ Pour chaque cible, il :
 4. bundle les dépendances npm publiques réellement importées, puis envoie les
    assets et les modules à l’API Cloudflare ;
 5. crée le Worker s'il n'existe pas, ou met à jour celui qui existe ;
-6. déploie immédiatement la nouvelle version.
+6. active le sous-domaine `workers.dev` du Worker ;
+7. déploie immédiatement la nouvelle version.
 
 ## Configuration
 
@@ -61,6 +62,11 @@ automatiquement l'ID correspondant dans le compte cible. Les dépendances npm so
 pour remplacer les imports bare que l'API Workers ne peut pas résoudre seule.
 Les secrets ne sont jamais lus
 depuis GitHub : ils doivent être fournis séparément comme bindings Cloudflare.
+
+Les routes personnalisées de domaine ne sont pas créées par cet updater. Il
+active le sous-domaine `workers.dev` du compte via l'API Cloudflare et renvoie
+l'URL dans `workersDevUrl`, au format
+`<worker>.<account-subdomain>.workers.dev`.
 
 Exemple de déclenchement manuel :
 

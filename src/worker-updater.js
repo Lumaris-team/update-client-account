@@ -370,6 +370,20 @@ async function workerExists(target, token, fetchImpl) {
   );
 }
 
+async function enableWorkerSubdomain(target, token, fetchImpl) {
+  const response = await requestJson(
+    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/subdomain`,
+    {
+      method: "PUT",
+      headers: { ...cloudflareHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    },
+    fetchImpl
+  );
+  const subdomain = response.result?.subdomain || response.result?.name;
+  return subdomain ? `${target.worker}.${subdomain}.workers.dev` : null;
+}
+
 async function uploadAssets(target, assets, token, fetchImpl) {
   if (!assets.length) return null;
   const manifest = Object.fromEntries(assets.map(({ path, bytes }) => [
@@ -433,11 +447,13 @@ export async function updateWorker(
     { method: "PUT", headers: cloudflareHeaders(token), body: form },
     fetchImpl
   );
+  const workersDevUrl = await enableWorkerSubdomain(target, token, fetchImpl);
   return {
     name: target.name,
     status: existed ? "updated" : "created",
     sha: repository.sha,
     worker: target.worker,
+    ...(workersDevUrl ? { workersDevUrl } : {}),
     result,
   };
 }
