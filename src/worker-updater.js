@@ -184,19 +184,24 @@ function githubHeaders(token) {
 }
 
 async function readRepository(target, githubToken, fetchImpl) {
-  const base = `${GITHUB_API}/repos/${target.owner}/${target.repo}`;
-  const repository = await requestJson(base, { headers: githubHeaders(githubToken) }, fetchImpl);
-  const branch = target.branch || repository.default_branch;
-  const commit = await requestJson(
-    `${base}/commits/${encodeURIComponent(branch)}`,
-    { headers: githubHeaders(githubToken) },
-    fetchImpl
-  );
-  const archiveResponse = await fetchImpl(
-    `${base}/tarball/${encodeURIComponent(commit.sha)}`,
-    { headers: githubHeaders(githubToken) }
-  );
-  const archive = await readArchive(archiveResponse);
+  const branches = target.branch ? [target.branch] : ["main", "master"];
+  let archive;
+  let branch;
+  for (const candidate of branches) {
+    const archiveResponse = await fetchImpl(
+      `https://codeload.github.com/${target.owner}/${target.repo}/tar.gz/refs/heads/${encodeURIComponent(candidate)}`
+    );
+    if (archiveResponse.ok) {
+      archive = await readArchive(archiveResponse);
+      branch = candidate;
+      break;
+    }
+  }
+  if (!archive) {
+    throw new Error(
+      `Cannot download public GitHub repository ${target.owner}/${target.repo}; configure its branch explicitly`
+    );
+  }
   const files = [...archive.entries()]
     .filter(([path]) => path === "wrangler.toml" || path === "wrangler.jsonc" || (
       (path.startsWith("src/") || path.startsWith(target.assetsDirectory)) &&
@@ -219,7 +224,7 @@ async function readRepository(target, githubToken, fetchImpl) {
   const wrangler = contents.has("wrangler.jsonc")
     ? parseWranglerJsonc(new TextDecoder().decode(wranglerFile))
     : parseWranglerToml(new TextDecoder().decode(wranglerFile));
-  return { sha: commit.sha, contents, wrangler };
+  return { sha: branch, contents, wrangler };
 }
 
 function md5(bytes) {

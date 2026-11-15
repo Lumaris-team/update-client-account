@@ -5,8 +5,7 @@ GitHub Actions et sans liaison entre GitHub et Cloudflare.
 
 Pour chaque cible, il :
 
-1. lit le dernier commit de la branche configurée sur GitHub ;
-2. télécharge l'archive GitHub en une seule requête ;
+1. télécharge l'archive publique GitHub de la branche configurée en une seule requête ;
 3. lit `wrangler.jsonc` (ou `wrangler.toml`) et convertit ses bindings ;
 4. envoie les assets puis le script à l'API Cloudflare ;
 5. crée le Worker s'il n'existe pas, ou met à jour celui qui existe ;
@@ -18,7 +17,8 @@ Définir les secrets/variables du Worker :
 
 - `CLOUDFLARE_ACCOUNT_TOKEN` : token API Cloudflare ayant les droits Workers nécessaires ;
 - `CLOUDFLARE_ACCOUNT_ID` : compte Cloudflare par défaut ;
-- `GITHUB_TOKEN` : optionnel, uniquement nécessaire pour des dépôts privés.
+- `GITHUB_TOKEN` n'est pas nécessaire pour les dépôts publics. Les dépôts privés
+  ne sont pas pris en charge sans authentification GitHub.
 
 `CONFIGURATION` accepte une URL simple :
 
