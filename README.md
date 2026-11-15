@@ -7,7 +7,8 @@ Pour chaque cible, il :
 
 1. télécharge l'archive publique GitHub de la branche configurée en une seule requête ;
 3. lit `wrangler.jsonc` (ou `wrangler.toml`) et convertit ses bindings ;
-4. envoie les assets puis le script à l'API Cloudflare ;
+4. bundle les dépendances npm publiques réellement importées, puis envoie les
+   assets et les modules à l’API Cloudflare ;
 5. crée le Worker s'il n'existe pas, ou met à jour celui qui existe ;
 6. déploie immédiatement la nouvelle version.
 
@@ -56,7 +57,9 @@ déployés ou utiliser un pipeline externe.
 Les bases D1 et Workflows référencés dans `wrangler.jsonc` doivent déjà exister
 dans le compte Cloudflare cible. Pour une base D1 déclarée avec un
 `database_name` et un identifiant placeholder `__D1_ID_*__`, l'updater récupère
-automatiquement l'ID correspondant dans le compte cible. Les secrets ne sont jamais lus
+automatiquement l'ID correspondant dans le compte cible. Les dépendances npm sont téléchargées depuis esm.sh pendant le déploiement
+pour remplacer les imports bare que l'API Workers ne peut pas résoudre seule.
+Les secrets ne sont jamais lus
 depuis GitHub : ils doivent être fournis séparément comme bindings Cloudflare.
 
 Exemple de déclenchement manuel :
