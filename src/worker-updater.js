@@ -95,6 +95,14 @@ export function parseWranglerToml(source) {
   return config;
 }
 
+export function parseWranglerJsonc(source) {
+  const json = source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "")
+    .replace(/,\s*([}\]])/g, "$1");
+  return JSON.parse(json);
+}
+
 function tarText(bytes, start, length) {
   return new TextDecoder().decode(bytes.subarray(start, start + length)).replace(/\0.*$/, "");
 }
@@ -189,7 +197,7 @@ async function readRepository(target, githubToken, fetchImpl) {
   );
   const archive = await readArchive(archiveResponse);
   const files = [...archive.entries()]
-    .filter(([path]) => path === "wrangler.toml" || (
+    .filter(([path]) => path === "wrangler.toml" || path === "wrangler.jsonc" || (
       (path.startsWith("src/") || path.startsWith(target.assetsDirectory)) &&
       (path.startsWith(`${target.assetsDirectory}/`) ||
         SOURCE_EXTENSIONS.has(path.slice(path.lastIndexOf("."))))
@@ -205,9 +213,11 @@ async function readRepository(target, githubToken, fetchImpl) {
     }
     contents.set(file.path, file.bytes);
   }
-  const wranglerFile = contents.get("wrangler.toml");
-  if (!wranglerFile) throw new Error("Target repository must contain wrangler.toml");
-  const wrangler = parseWranglerToml(new TextDecoder().decode(wranglerFile));
+  const wranglerFile = contents.get("wrangler.jsonc") || contents.get("wrangler.toml");
+  if (!wranglerFile) throw new Error("Target repository must contain wrangler.jsonc or wrangler.toml");
+  const wrangler = contents.has("wrangler.jsonc")
+    ? parseWranglerJsonc(new TextDecoder().decode(wranglerFile))
+    : parseWranglerToml(new TextDecoder().decode(wranglerFile));
   return { sha: commit.sha, contents, wrangler };
 }
 
@@ -250,6 +260,28 @@ function md5(bytes) {
 
 function cloudflareHeaders(token) {
   return { Authorization: `Bearer ${token}` };
+}
+
+async function resolveD1Bindings(wrangler, target, token, fetchImpl) {
+  const bindings = wrangler.d1_databases || [];
+  if (!bindings.length) return wrangler;
+  const response = await requestJson(
+    `${CLOUDFLARE_API}/accounts/${target.accountId}/d1/database`,
+    { headers: cloudflareHeaders(token) },
+    fetchImpl
+  );
+  const databases = response.result || [];
+  return {
+    ...wrangler,
+    d1_databases: bindings.map((binding) => {
+      if (binding.database_id && !binding.database_id.startsWith("__D1_ID_")) return binding;
+      const database = databases.find((item) => item.name === binding.database_name);
+      if (!database?.uuid) {
+        throw new Error(`D1 database '${binding.database_name}' was not found`);
+      }
+      return { ...binding, database_id: database.uuid };
+    }),
+  };
 }
 
 function base64(bytes) {
@@ -312,6 +344,7 @@ export async function updateWorker(
     mainModule: repository.wrangler.main || target.mainModule,
     assetsDirectory: (repository.wrangler.assets?.directory || target.assetsDirectory).replace(/^\.\//, ""),
   };
+  repository.wrangler = await resolveD1Bindings(repository.wrangler, target, token, fetchImpl);
   const assets = [...repository.contents.entries()]
     .filter(([path]) => path.startsWith(`${target.assetsDirectory}/`))
     .map(([path, bytes]) => ({ path: path.slice(target.assetsDirectory.length + 1), bytes }));
