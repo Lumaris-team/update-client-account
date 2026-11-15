@@ -5,60 +5,55 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".json", ".txt"]);
 const DEPENDENCY_EXTENSIONS = new Set([".js", ".mjs"]);
 
+function dependencyVersion(version) {
+  return version.replace(/^[~^<>=\s]*/g, "").split(" ")[0];
+}
+
+function relativeModulePath(from, to) {
+  const fromParts = from.split("/");
+  fromParts.pop();
+  const toParts = to.split("/");
+  while (fromParts.length && toParts.length && fromParts[0] === toParts[0]) {
+    fromParts.shift();
+    toParts.shift();
+  }
+  return `${"./".repeat(fromParts.length ? 0 : 1)}${"../".repeat(fromParts.length)}${toParts.join("/")}`;
+}
+
+async function bundleDependencies(contents, packageJson, fetchImpl) {
+  const sourceFiles = [...contents.entries()]
+    .filter(([path]) => DEPENDENCY_EXTENSIONS.has(path.slice(path.lastIndexOf("."))));
+  const dependencies = packageJson?.dependencies || {};
+  for (const [name, version] of Object.entries(dependencies)) {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const imported = sourceFiles.some(([, bytes]) =>
+      new TextDecoder().decode(bytes).match(new RegExp(`(?:from|import\\s*\\()\\s*["']${escapedName}`))
+    );
+    if (!imported) continue;
+    const entry = await fetchImpl(
+      `https://esm.sh/${encodeURIComponent(name)}@${encodeURIComponent(dependencyVersion(version))}?bundle&target=es2022`
+    );
+    if (!entry.ok) throw new Error(`Cannot bundle npm dependency ${name} (${entry.status})`);
+    const entryText = await entry.text();
+    const bundlePath = entryText.match(/from ["'](\/[^"']+\.m?js)["']/)?.[1];
+    const bundleResponse = await fetchImpl(bundlePath ? `https://esm.sh${bundlePath}` : entry.url);
+    if (!bundleResponse.ok) throw new Error(`Cannot download npm bundle ${name} (${bundleResponse.status})`);
+    const dependencyPath = `__dependencies__/${name.replace(/[^A-Za-z0-9._-]/g, "_")}.mjs`;
+    contents.set(dependencyPath, new Uint8Array(await bundleResponse.arrayBuffer()));
+    for (const [path, bytes] of sourceFiles) {
+      const text = new TextDecoder().decode(bytes);
+      contents.set(path, new TextEncoder().encode(text.replace(
+        new RegExp(`(["'])${escapedName}\\1`, "g"),
+        `$1${relativeModulePath(path, dependencyPath)}$1`
+      )));
+    }
+  }
+  return contents;
+}
+
 function repositoryParts(value) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error("Each repository must be a GitHub repository URL");
-  }
-
-  function dependencyVersion(version) {
-    return version.replace(/^[~^<>=\s]*/g, "").split(" ")[0];
-  }
-
-  function relativeModulePath(from, to) {
-    const fromParts = from.split("/");
-    fromParts.pop();
-    const toParts = to.split("/");
-    while (fromParts.length && toParts.length && fromParts[0] === toParts[0]) {
-      fromParts.shift();
-      toParts.shift();
-    }
-    return `${"./".repeat(fromParts.length ? 0 : 1)}${"../".repeat(fromParts.length)}${toParts.join("/")}`;
-  }
-
-  async function bundleDependencies(contents, packageJson, fetchImpl) {
-    const sourceFiles = [...contents.entries()]
-      .filter(([path]) => DEPENDENCY_EXTENSIONS.has(path.slice(path.lastIndexOf("."))));
-    const dependencies = packageJson?.dependencies || {};
-    for (const [name, version] of Object.entries(dependencies)) {
-      const imported = sourceFiles.some(([, bytes]) =>
-        new TextDecoder().decode(bytes).match(new RegExp(`(?:from|import\\s*\\()\\s*["']${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))
-      );
-      if (!imported) continue;
-
-      const versioned = dependencyVersion(version);
-      const entry = await fetchImpl(
-        `https://esm.sh/${encodeURIComponent(name)}@${encodeURIComponent(versioned)}?bundle&target=es2022`
-      );
-      if (!entry.ok) throw new Error(`Cannot bundle npm dependency ${name} (${entry.status})`);
-      const entryText = await entry.text();
-      const bundlePath = entryText.match(/from ["'](\/[^"']+\.m?js)["']/)?.[1];
-      const bundleResponse = await fetchImpl(
-        bundlePath ? `https://esm.sh${bundlePath}` : entry.url
-      );
-      if (!bundleResponse.ok) throw new Error(`Cannot download npm bundle ${name} (${bundleResponse.status})`);
-      const dependencyPath = `__dependencies__/${name.replace(/[^A-Za-z0-9._-]/g, "_")}.mjs`;
-      contents.set(dependencyPath, new Uint8Array(await bundleResponse.arrayBuffer()));
-      for (const [path, bytes] of sourceFiles) {
-        const text = new TextDecoder().decode(bytes);
-        const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const rewritten = text.replace(
-          new RegExp(`(["'])${escapedName}\\1`, "g"),
-          `$1${relativeModulePath(path, dependencyPath)}$1`
-        );
-        contents.set(path, new TextEncoder().encode(rewritten));
-      }
-    }
-    return contents;
   }
   const match = value.trim().match(
     /^(?:https?:\/\/github\.com\/|git@github\.com:)([^/:\s]+)\/([^/\s]+?)(?:\.git)?\/?$/
