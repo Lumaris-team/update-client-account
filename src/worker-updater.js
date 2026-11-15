@@ -200,6 +200,17 @@ export function workerMetadata(target, wrangler, assetToken) {
       script_name: target.worker,
     });
   }
+  for (const binding of wrangler.secrets_store_secrets || []) {
+    if (!binding.binding || !binding.store_id || !binding.secret_name) {
+      throw new Error("Every Secrets Store binding needs binding, store_id and secret_name");
+    }
+    bindings.push({
+      name: binding.binding,
+      type: "secret_store_secret",
+      store_id: binding.store_id,
+      secret_name: binding.secret_name,
+    });
+  }
   if (wrangler.ai?.binding) bindings.push({ name: wrangler.ai.binding, type: "ai" });
   if (assetToken) bindings.push({ name: "ASSETS", type: "assets" });
 
@@ -208,11 +219,6 @@ export function workerMetadata(target, wrangler, assetToken) {
     compatibility_date: wrangler.compatibility_date || "2026-07-19",
     bindings,
   };
-  if (wrangler.vars) {
-    for (const [name, value] of Object.entries(wrangler.vars)) {
-      bindings.push({ name, type: "plain_text", text: String(value) });
-    }
-  }
   if (wrangler.compatibility_flags) metadata.compatibility_flags = wrangler.compatibility_flags;
   if (wrangler.observability) metadata.observability = wrangler.observability;
   if (assetToken) {
@@ -221,6 +227,7 @@ export function workerMetadata(target, wrangler, assetToken) {
       ...(wrangler.assets?.html_handling ? { config: { html_handling: wrangler.assets.html_handling } } : {}),
     };
   }
+
   return metadata;
 }
 
@@ -231,6 +238,42 @@ async function requestJson(url, options = {}, fetchImpl = fetch) {
     throw new Error(`Request failed (${response.status}): ${body.slice(0, 300)}`);
   }
   return response.json();
+}
+
+async function resolveLoginSecretBindings(wrangler, target, token, fetchImpl) {
+  if (target.worker !== "login-client-worker") return wrangler;
+  const required = ["MAIN_PASSWORD", "MAIN_USERNAME", "MAIN_EMAIL"];
+  const configured = wrangler.secrets_store_secrets || [];
+  if (required.every((name) => configured.some((binding) => binding.binding === name))) {
+    return wrangler;
+  }
+
+  const stores = await requestJson(
+    `${CLOUDFLARE_API}/accounts/${target.accountId}/secrets_store/stores`,
+    { headers: cloudflareHeaders(token) },
+    fetchImpl
+  );
+  for (const store of stores.result || []) {
+    const secrets = await requestJson(
+      `${CLOUDFLARE_API}/accounts/${target.accountId}/secrets_store/stores/${encodeURIComponent(store.id)}/secrets`,
+      { headers: cloudflareHeaders(token) },
+      fetchImpl
+    );
+    const names = new Set((secrets.result || []).map((secret) => secret.name));
+    if (required.every((name) => names.has(name))) {
+      return {
+        ...wrangler,
+        secrets_store_secrets: required.map((name) => ({
+          binding: name,
+          store_id: store.id,
+          secret_name: name,
+        })),
+      };
+    }
+  }
+  throw new Error(
+    "Secrets Store bindings MAIN_PASSWORD, MAIN_USERNAME and MAIN_EMAIL were not found"
+  );
 }
 
 function githubHeaders(token) {
@@ -436,6 +479,9 @@ export async function updateWorker(
     assetsDirectory: (repository.wrangler.assets?.directory || target.assetsDirectory).replace(/^\.\//, ""),
   };
   repository.wrangler = await resolveD1Bindings(repository.wrangler, target, token, fetchImpl);
+  repository.wrangler = await resolveLoginSecretBindings(
+    repository.wrangler, target, token, fetchImpl
+  );
   const assets = [...repository.contents.entries()]
     .filter(([path]) => path.startsWith(`${target.assetsDirectory}/`))
     .map(([path, bytes]) => ({ path: path.slice(target.assetsDirectory.length + 1), bytes }));
