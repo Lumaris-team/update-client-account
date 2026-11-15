@@ -372,15 +372,22 @@ async function workerExists(target, token, fetchImpl) {
 }
 
 async function enableWorkerSubdomain(target, token, fetchImpl) {
-  const response = await requestJson(
-    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/subdomain`,
-    {
+  const endpoint = `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/subdomain`;
+  const headers = cloudflareHeaders(token);
+  const existing = await fetchImpl(endpoint, { headers });
+  let response;
+  if (existing.ok) {
+    response = await existing.json();
+  } else if (existing.status === 404) {
+    response = await requestJson(endpoint, {
       method: "PUT",
-      headers: { ...cloudflareHeaders(token), "Content-Type": "application/json" },
+      headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: true }),
-    },
-    fetchImpl
-  );
+    }, fetchImpl);
+  } else {
+    const body = await existing.text();
+    throw new Error(`Cannot inspect Workers subdomain (${existing.status}): ${body.slice(0, 300)}`);
+  }
   const subdomain = response.result?.subdomain || response.result?.name;
   return subdomain ? `${target.worker}.${subdomain}.workers.dev` : null;
 }
