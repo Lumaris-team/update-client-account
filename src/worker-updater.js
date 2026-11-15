@@ -208,6 +208,11 @@ export function workerMetadata(target, wrangler, assetToken) {
     compatibility_date: wrangler.compatibility_date || "2026-07-19",
     bindings,
   };
+  if (wrangler.vars) {
+    for (const [name, value] of Object.entries(wrangler.vars)) {
+      bindings.push({ name, type: "plain_text", text: String(value) });
+    }
+  }
   if (wrangler.compatibility_flags) metadata.compatibility_flags = wrangler.compatibility_flags;
   if (wrangler.observability) metadata.observability = wrangler.observability;
   if (assetToken) {
