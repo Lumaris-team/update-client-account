@@ -32,6 +32,13 @@ test("parses the documented configuration shape", () => {
   ]);
 });
 
+test("parses configuration wrapped as a JSON string", () => {
+  const configuration = JSON.stringify(JSON.stringify({
+    worker1: "https://github.com/acme/one",
+  }));
+  assert.equal(parseConfiguration(configuration)[0].repo, "one");
+});
+
 test("parses a complete deployment target", () => {
   assert.deepEqual(parseConfiguration(JSON.stringify({
     dashboard: {
