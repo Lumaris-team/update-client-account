@@ -4,6 +4,7 @@ import {
   parseConfiguration,
   parseRepositoryUrl,
   parseWranglerToml,
+  workerMetadata,
 } from "../src/worker-updater.js";
 
 test("parses HTTPS and SSH GitHub repository URLs", () => {
@@ -92,6 +93,22 @@ test("parses Wrangler bindings", () => {
   assert.deepEqual(config.kv_namespaces[0], { binding: "CACHE", id: "kv-id" });
   assert.deepEqual(config.d1_databases[0], { binding: "DB", database_id: "d1-id" });
   assert.deepEqual(config.workflows[0], { name: "grades", binding: "GRADES" });
+});
+
+test("includes Wrangler observability settings in deployment metadata", () => {
+  const observability = {
+    enabled: true,
+    head_sampling_rate: 1,
+    logs: { enabled: true, invocation_logs: true },
+  };
+  assert.deepEqual(
+    workerMetadata(
+      { mainModule: "src/index.js" },
+      { observability },
+      undefined
+    ).observability,
+    observability
+  );
 });
 
 test("rejects malformed configuration and non-GitHub URLs", () => {

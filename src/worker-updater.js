@@ -176,7 +176,7 @@ async function readArchive(response) {
   return contents;
 }
 
-function workerMetadata(target, wrangler, assetToken) {
+export function workerMetadata(target, wrangler, assetToken) {
   const bindings = [];
   for (const [name, text] of Object.entries(wrangler.vars || {})) {
     bindings.push({ name, type: "plain_text", text: String(text) });
@@ -209,6 +209,7 @@ function workerMetadata(target, wrangler, assetToken) {
     bindings,
   };
   if (wrangler.compatibility_flags) metadata.compatibility_flags = wrangler.compatibility_flags;
+  if (wrangler.observability) metadata.observability = wrangler.observability;
   if (assetToken) {
     metadata.assets = {
       jwt: assetToken,
