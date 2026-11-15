@@ -193,7 +193,12 @@ function workerMetadata(target, wrangler, assetToken) {
   }
   for (const binding of wrangler.workflows || []) {
     if (!binding.binding || !binding.name) throw new Error("Every Workflow binding needs binding and name");
-    bindings.push({ name: binding.binding, type: "workflow", workflow_name: binding.name });
+    bindings.push({
+      name: binding.binding,
+      type: "workflow",
+      workflow_name: binding.name,
+      script_name: target.worker,
+    });
   }
   if (wrangler.ai?.binding) bindings.push({ name: wrangler.ai.binding, type: "ai" });
   if (assetToken) bindings.push({ name: "ASSETS", type: "assets" });
