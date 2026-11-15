@@ -3,10 +3,62 @@ const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const MAX_FILES = 100;
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".json", ".txt"]);
+const DEPENDENCY_EXTENSIONS = new Set([".js", ".mjs"]);
 
 function repositoryParts(value) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error("Each repository must be a GitHub repository URL");
+  }
+
+  function dependencyVersion(version) {
+    return version.replace(/^[~^<>=\s]*/g, "").split(" ")[0];
+  }
+
+  function relativeModulePath(from, to) {
+    const fromParts = from.split("/");
+    fromParts.pop();
+    const toParts = to.split("/");
+    while (fromParts.length && toParts.length && fromParts[0] === toParts[0]) {
+      fromParts.shift();
+      toParts.shift();
+    }
+    return `${"./".repeat(fromParts.length ? 0 : 1)}${"../".repeat(fromParts.length)}${toParts.join("/")}`;
+  }
+
+  async function bundleDependencies(contents, packageJson, fetchImpl) {
+    const sourceFiles = [...contents.entries()]
+      .filter(([path]) => DEPENDENCY_EXTENSIONS.has(path.slice(path.lastIndexOf("."))));
+    const dependencies = packageJson?.dependencies || {};
+    for (const [name, version] of Object.entries(dependencies)) {
+      const imported = sourceFiles.some(([, bytes]) =>
+        new TextDecoder().decode(bytes).match(new RegExp(`(?:from|import\\s*\\()\\s*["']${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))
+      );
+      if (!imported) continue;
+
+      const versioned = dependencyVersion(version);
+      const entry = await fetchImpl(
+        `https://esm.sh/${encodeURIComponent(name)}@${encodeURIComponent(versioned)}?bundle&target=es2022`
+      );
+      if (!entry.ok) throw new Error(`Cannot bundle npm dependency ${name} (${entry.status})`);
+      const entryText = await entry.text();
+      const bundlePath = entryText.match(/from ["'](\/[^"']+\.m?js)["']/)?.[1];
+      const bundleResponse = await fetchImpl(
+        bundlePath ? `https://esm.sh${bundlePath}` : entry.url
+      );
+      if (!bundleResponse.ok) throw new Error(`Cannot download npm bundle ${name} (${bundleResponse.status})`);
+      const dependencyPath = `__dependencies__/${name.replace(/[^A-Za-z0-9._-]/g, "_")}.mjs`;
+      contents.set(dependencyPath, new Uint8Array(await bundleResponse.arrayBuffer()));
+      for (const [path, bytes] of sourceFiles) {
+        const text = new TextDecoder().decode(bytes);
+        const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const rewritten = text.replace(
+          new RegExp(`(["'])${escapedName}\\1`, "g"),
+          `$1${relativeModulePath(path, dependencyPath)}$1`
+        );
+        contents.set(path, new TextEncoder().encode(rewritten));
+      }
+    }
+    return contents;
   }
   const match = value.trim().match(
     /^(?:https?:\/\/github\.com\/|git@github\.com:)([^/:\s]+)\/([^/\s]+?)(?:\.git)?\/?$/
@@ -212,7 +264,7 @@ async function readRepository(target, githubToken, fetchImpl) {
     );
   }
   const files = [...archive.entries()]
-    .filter(([path]) => path === "wrangler.toml" || path === "wrangler.jsonc" || (
+    .filter(([path]) => path === "wrangler.toml" || path === "wrangler.jsonc" || path === "package.json" || (
       (path.startsWith("src/") || path.startsWith(target.assetsDirectory)) &&
       (path.startsWith(`${target.assetsDirectory}/`) ||
         SOURCE_EXTENSIONS.has(path.slice(path.lastIndexOf("."))))
@@ -228,6 +280,11 @@ async function readRepository(target, githubToken, fetchImpl) {
     }
     contents.set(file.path, file.bytes);
   }
+  const packageJsonFile = contents.get("package.json");
+  const packageJson = packageJsonFile
+    ? JSON.parse(new TextDecoder().decode(packageJsonFile))
+    : null;
+  await bundleDependencies(contents, packageJson, fetchImpl);
   const wranglerFile = contents.get("wrangler.jsonc") || contents.get("wrangler.toml");
   if (!wranglerFile) throw new Error("Target repository must contain wrangler.jsonc or wrangler.toml");
   const wrangler = contents.has("wrangler.jsonc")
@@ -365,7 +422,13 @@ export async function updateWorker(
     .map(([path, bytes]) => ({ path: path.slice(target.assetsDirectory.length + 1), bytes }));
   const assetToken = await uploadAssets(target, assets, token, fetchImpl);
   const modules = [...repository.contents.entries()]
-    .filter(([path]) => SOURCE_EXTENSIONS.has(path.slice(path.lastIndexOf("."))) && !path.startsWith(`${target.assetsDirectory}/`));
+    .filter(([path]) =>
+      SOURCE_EXTENSIONS.has(path.slice(path.lastIndexOf("."))) &&
+      path !== "wrangler.toml" &&
+      path !== "wrangler.jsonc" &&
+      path !== "package.json" &&
+      !path.startsWith(`${target.assetsDirectory}/`)
+    );
   const form = new FormData();
   form.append("metadata", new Blob([JSON.stringify(
     workerMetadata(target, repository.wrangler, assetToken)
