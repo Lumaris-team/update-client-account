@@ -111,6 +111,26 @@ test("includes Wrangler observability settings in deployment metadata", () => {
   );
 });
 
+test("includes Secrets Store bindings in deployment metadata", () => {
+  const metadata = workerMetadata(
+    { mainModule: "src/index.js" },
+    {
+      secrets_store_secrets: [{
+        binding: "MAIN_PASSWORD",
+        store_id: "store-id",
+        secret_name: "MAIN_PASSWORD",
+      }],
+    },
+    undefined
+  );
+  assert.deepEqual(metadata.bindings, [{
+    name: "MAIN_PASSWORD",
+    type: "secret_store_secret",
+    store_id: "store-id",
+    secret_name: "MAIN_PASSWORD",
+  }]);
+});
+
 test("rejects malformed configuration and non-GitHub URLs", () => {
   assert.throws(() => parseConfiguration("[]"), /JSON object/);
   assert.throws(() => parseRepositoryUrl("https://gitlab.com/acme/worker"), /Unsupported/);
