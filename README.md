@@ -7,7 +7,7 @@ Pour chaque cible, il :
 
 1. lit le dernier commit de la branche configurée sur GitHub ;
 2. télécharge l'archive GitHub en une seule requête ;
-3. lit `wrangler.toml` et convertit ses bindings ;
+3. lit `wrangler.jsonc` (ou `wrangler.toml`) et convertit ses bindings ;
 4. envoie les assets puis le script à l'API Cloudflare ;
 5. crée le Worker s'il n'existe pas, ou met à jour celui qui existe ;
 6. déploie immédiatement la nouvelle version.
@@ -53,8 +53,10 @@ Cela évite de dépasser rapidement les limites de sous-requêtes et de mémoire
 d'un Worker Free. Pour un dépôt plus important, il faut réduire les fichiers
 déployés ou utiliser un pipeline externe.
 
-Les namespaces KV, bases D1 et Workflows référencés dans `wrangler.toml` doivent
-déjà exister dans le compte Cloudflare cible. Les secrets ne sont jamais lus
+Les bases D1 et Workflows référencés dans `wrangler.jsonc` doivent déjà exister
+dans le compte Cloudflare cible. Pour une base D1 déclarée avec un
+`database_name` et un identifiant placeholder `__D1_ID_*__`, l'updater récupère
+automatiquement l'ID correspondant dans le compte cible. Les secrets ne sont jamais lus
 depuis GitHub : ils doivent être fournis séparément comme bindings Cloudflare.
 
 Exemple de déclenchement manuel :
