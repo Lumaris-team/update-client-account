@@ -111,23 +111,21 @@ test("includes Wrangler observability settings in deployment metadata", () => {
   );
 });
 
-test("includes Secrets Store bindings in deployment metadata", () => {
+test("includes secret text bindings in deployment metadata", () => {
   const metadata = workerMetadata(
     { mainModule: "src/index.js" },
     {
-      secrets_store_secrets: [{
-        binding: "MAIN_PASSWORD",
-        store_id: "store-id",
-        secret_name: "MAIN_PASSWORD",
+      secret_texts: [{
+        name: "MAIN_PASSWORD",
+        text: "test-secret",
       }],
     },
     undefined
   );
   assert.deepEqual(metadata.bindings, [{
     name: "MAIN_PASSWORD",
-    type: "secret_store_secret",
-    store_id: "store-id",
-    secret_name: "MAIN_PASSWORD",
+    type: "secret_text",
+    text: "test-secret",
   }]);
 });
 
