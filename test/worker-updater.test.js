@@ -126,6 +126,27 @@ test("does not serialize Secrets Store references as unsupported bindings", () =
   assert.deepEqual(metadata.bindings, []);
 });
 
+test("inherits existing bindings during a replacement upload", () => {
+  const metadata = workerMetadata(
+    { mainModule: "src/index.js" },
+    { vars: { MODE: "production" } },
+    undefined,
+    {
+      result: {
+        bindings: [
+          { name: "MAIN_USERNAME", type: "secret_store_secret" },
+          { name: "MAIN_PASSWORD", type: "secret_store_secret" },
+        ],
+      },
+    }
+  );
+  assert.deepEqual(metadata.bindings, [
+    { name: "MODE", type: "plain_text", text: "production" },
+    { name: "MAIN_USERNAME", type: "inherit" },
+    { name: "MAIN_PASSWORD", type: "inherit" },
+  ]);
+});
+
 test("rejects malformed configuration and non-GitHub URLs", () => {
   assert.throws(() => parseConfiguration("[]"), /JSON object/);
   assert.throws(() => parseRepositoryUrl("https://gitlab.com/acme/worker"), /Unsupported/);
