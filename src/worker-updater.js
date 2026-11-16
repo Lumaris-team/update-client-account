@@ -200,16 +200,11 @@ export function workerMetadata(target, wrangler, assetToken) {
       script_name: target.worker,
     });
   }
-  for (const binding of wrangler.secrets_store_secrets || []) {
-    if (!binding.binding || !binding.store_id || !binding.secret_name) {
-      throw new Error("Every Secrets Store binding needs binding, store_id and secret_name");
+  for (const binding of wrangler.secret_texts || []) {
+    if (!binding.name || typeof binding.text !== "string") {
+      throw new Error("Every secret text binding needs name and text");
     }
-    bindings.push({
-      name: binding.binding,
-      type: "secret_store_secret",
-      store_id: binding.store_id,
-      secret_name: binding.secret_name,
-    });
+    bindings.push({ type: "secret_text", name: binding.name, text: binding.text });
   }
   if (wrangler.ai?.binding) bindings.push({ name: wrangler.ai.binding, type: "ai" });
   if (assetToken) bindings.push({ name: "ASSETS", type: "assets" });
@@ -263,10 +258,17 @@ async function resolveLoginSecretBindings(wrangler, target, token, fetchImpl) {
     if (required.every((name) => names.has(name))) {
       return {
         ...wrangler,
-        secrets_store_secrets: required.map((name) => ({
-          binding: name,
-          store_id: store.id,
-          secret_name: name,
+        secret_texts: await Promise.all(required.map(async (name) => {
+          const secret = (secrets.result || []).find((entry) => entry.name === name);
+          const details = await requestJson(
+            `${CLOUDFLARE_API}/accounts/${target.accountId}/secrets_store/stores/${encodeURIComponent(store.id)}/secrets/${encodeURIComponent(secret.id)}`,
+            { headers: cloudflareHeaders(token) },
+            fetchImpl
+          );
+          if (typeof details.result?.value !== "string") {
+            throw new Error(`Secret Store value unavailable for ${name}`);
+          }
+          return { name, text: details.result.value };
         })),
       };
     }
