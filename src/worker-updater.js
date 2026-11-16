@@ -235,49 +235,6 @@ async function requestJson(url, options = {}, fetchImpl = fetch) {
   return response.json();
 }
 
-async function resolveLoginSecretBindings(wrangler, target, token, fetchImpl) {
-  if (target.worker !== "login-client-worker") return wrangler;
-  const required = ["MAIN_PASSWORD", "MAIN_USERNAME", "MAIN_EMAIL"];
-  const configured = wrangler.secrets_store_secrets || [];
-  if (required.every((name) => configured.some((binding) => binding.binding === name))) {
-    return wrangler;
-  }
-
-  const stores = await requestJson(
-    `${CLOUDFLARE_API}/accounts/${target.accountId}/secrets_store/stores`,
-    { headers: cloudflareHeaders(token) },
-    fetchImpl
-  );
-  for (const store of stores.result || []) {
-    const secrets = await requestJson(
-      `${CLOUDFLARE_API}/accounts/${target.accountId}/secrets_store/stores/${encodeURIComponent(store.id)}/secrets`,
-      { headers: cloudflareHeaders(token) },
-      fetchImpl
-    );
-    const names = new Set((secrets.result || []).map((secret) => secret.name));
-    if (required.every((name) => names.has(name))) {
-      return {
-        ...wrangler,
-        secret_texts: await Promise.all(required.map(async (name) => {
-          const secret = (secrets.result || []).find((entry) => entry.name === name);
-          const details = await requestJson(
-            `${CLOUDFLARE_API}/accounts/${target.accountId}/secrets_store/stores/${encodeURIComponent(store.id)}/secrets/${encodeURIComponent(secret.id)}`,
-            { headers: cloudflareHeaders(token) },
-            fetchImpl
-          );
-          if (typeof details.result?.value !== "string") {
-            throw new Error(`Secret Store value unavailable for ${name}`);
-          }
-          return { name, text: details.result.value };
-        })),
-      };
-    }
-  }
-  throw new Error(
-    "Secrets Store bindings MAIN_PASSWORD, MAIN_USERNAME and MAIN_EMAIL were not found"
-  );
-}
-
 function githubHeaders(token) {
   return {
     Accept: "application/vnd.github+json",
@@ -481,9 +438,6 @@ export async function updateWorker(
     assetsDirectory: (repository.wrangler.assets?.directory || target.assetsDirectory).replace(/^\.\//, ""),
   };
   repository.wrangler = await resolveD1Bindings(repository.wrangler, target, token, fetchImpl);
-  repository.wrangler = await resolveLoginSecretBindings(
-    repository.wrangler, target, token, fetchImpl
-  );
   const assets = [...repository.contents.entries()]
     .filter(([path]) => path.startsWith(`${target.assetsDirectory}/`))
     .map(([path, bytes]) => ({ path: path.slice(target.assetsDirectory.length + 1), bytes }));

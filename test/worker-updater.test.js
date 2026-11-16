@@ -111,22 +111,19 @@ test("includes Wrangler observability settings in deployment metadata", () => {
   );
 });
 
-test("includes secret text bindings in deployment metadata", () => {
+test("does not serialize Secrets Store references as unsupported bindings", () => {
   const metadata = workerMetadata(
     { mainModule: "src/index.js" },
     {
-      secret_texts: [{
-        name: "MAIN_PASSWORD",
-        text: "test-secret",
+      secrets_store_secrets: [{
+        binding: "MAIN_PASSWORD",
+        store_id: "store-id",
+        secret_name: "MAIN_PASSWORD",
       }],
     },
     undefined
   );
-  assert.deepEqual(metadata.bindings, [{
-    name: "MAIN_PASSWORD",
-    type: "secret_text",
-    text: "test-secret",
-  }]);
+  assert.deepEqual(metadata.bindings, []);
 });
 
 test("rejects malformed configuration and non-GitHub URLs", () => {
