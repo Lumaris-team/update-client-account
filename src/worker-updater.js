@@ -176,7 +176,16 @@ async function readArchive(response) {
   return contents;
 }
 
-export function workerMetadata(target, wrangler, assetToken) {
+function existingBindings(settings) {
+  const bindings = settings?.bindings ||
+    settings?.metadata?.bindings ||
+    settings?.result?.bindings ||
+    settings?.result?.settings?.bindings ||
+    settings?.result?.metadata?.bindings;
+  return Array.isArray(bindings) ? bindings : [];
+}
+
+export function workerMetadata(target, wrangler, assetToken, settings) {
   const bindings = [];
   for (const [name, text] of Object.entries(wrangler.vars || {})) {
     bindings.push({ name, type: "plain_text", text: String(text) });
@@ -208,6 +217,12 @@ export function workerMetadata(target, wrangler, assetToken) {
   }
   if (wrangler.ai?.binding) bindings.push({ name: wrangler.ai.binding, type: "ai" });
   if (assetToken) bindings.push({ name: "ASSETS", type: "assets" });
+  const configuredNames = new Set(bindings.map(({ name }) => name));
+  for (const binding of existingBindings(settings)) {
+    if (binding?.name && !configuredNames.has(binding.name)) {
+      bindings.push({ name: binding.name, type: "inherit" });
+    }
+  }
 
   const metadata = {
     main_module: target.mainModule,
@@ -235,27 +250,14 @@ async function requestJson(url, options = {}, fetchImpl = fetch) {
   return response.json();
 }
 
-async function readWorkerSettings(target, token, fetchImpl) {
+async function readLatestVersion(target, token, fetchImpl) {
   const response = await fetchImpl(
-    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.worker)}/settings`,
+    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.worker)}/versions`,
     { headers: cloudflareHeaders(token) }
   );
   if (!response.ok) return null;
-  return response.json();
-}
-
-async function preserveWorkerBindings(target, token, settings, fetchImpl) {
-  const bindings = settings?.result?.bindings;
-  if (!Array.isArray(bindings) || !bindings.length) return;
-  const form = new FormData();
-  form.append("settings", new Blob([JSON.stringify({ bindings })], {
-    type: "application/json",
-  }), "settings.json");
-  await requestJson(
-    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.worker)}/settings`,
-    { method: "PATCH", headers: cloudflareHeaders(token), body: form },
-    fetchImpl
-  );
+  const body = await response.json();
+  return Array.isArray(body.result) ? body.result[0] || null : null;
 }
 
 function githubHeaders(token) {
@@ -454,7 +456,7 @@ export async function updateWorker(
   target = { ...target, accountId: target.accountId || accountId };
   if (!target.accountId) throw new Error(`No Cloudflare account ID configured for ${target.name}`);
   const existed = await workerExists(target, token, fetchImpl);
-  const previousSettings = existed ? await readWorkerSettings(target, token, fetchImpl) : null;
+  const previousSettings = existed ? await readLatestVersion(target, token, fetchImpl) : null;
   const repository = await readRepository(target, githubToken, fetchImpl);
   target = {
     ...target,
@@ -476,17 +478,16 @@ export async function updateWorker(
     );
   const form = new FormData();
   form.append("metadata", new Blob([JSON.stringify(
-    workerMetadata(target, repository.wrangler, assetToken)
+    workerMetadata(target, repository.wrangler, assetToken, previousSettings)
   )], { type: "application/json" }), "metadata.json");
   for (const [path, bytes] of modules) {
     form.append(path, new Blob([bytes], { type: path.endsWith(".js") || path.endsWith(".mjs") ? "application/javascript+module" : "application/json" }), path);
   }
   const result = await requestJson(
-    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.worker)}`,
+    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.worker)}?bindings_inherit=strict`,
     { method: "PUT", headers: cloudflareHeaders(token), body: form },
     fetchImpl
   );
-  await preserveWorkerBindings(target, token, previousSettings, fetchImpl);
   const workersDevUrl = await enableWorkerSubdomain(target, token, fetchImpl);
   return {
     name: target.name,
