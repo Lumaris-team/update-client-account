@@ -235,6 +235,29 @@ async function requestJson(url, options = {}, fetchImpl = fetch) {
   return response.json();
 }
 
+async function readWorkerSettings(target, token, fetchImpl) {
+  const response = await fetchImpl(
+    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.worker)}/settings`,
+    { headers: cloudflareHeaders(token) }
+  );
+  if (!response.ok) return null;
+  return response.json();
+}
+
+async function preserveWorkerBindings(target, token, settings, fetchImpl) {
+  const bindings = settings?.result?.bindings;
+  if (!Array.isArray(bindings) || !bindings.length) return;
+  const form = new FormData();
+  form.append("settings", new Blob([JSON.stringify({ bindings })], {
+    type: "application/json",
+  }), "settings.json");
+  await requestJson(
+    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.worker)}/settings`,
+    { method: "PATCH", headers: cloudflareHeaders(token), body: form },
+    fetchImpl
+  );
+}
+
 function githubHeaders(token) {
   return {
     Accept: "application/vnd.github+json",
@@ -431,6 +454,7 @@ export async function updateWorker(
   target = { ...target, accountId: target.accountId || accountId };
   if (!target.accountId) throw new Error(`No Cloudflare account ID configured for ${target.name}`);
   const existed = await workerExists(target, token, fetchImpl);
+  const previousSettings = existed ? await readWorkerSettings(target, token, fetchImpl) : null;
   const repository = await readRepository(target, githubToken, fetchImpl);
   target = {
     ...target,
@@ -462,6 +486,7 @@ export async function updateWorker(
     { method: "PUT", headers: cloudflareHeaders(token), body: form },
     fetchImpl
   );
+  await preserveWorkerBindings(target, token, previousSettings, fetchImpl);
   const workersDevUrl = await enableWorkerSubdomain(target, token, fetchImpl);
   return {
     name: target.name,
