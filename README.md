@@ -6,7 +6,7 @@ GitHub Actions et sans liaison entre GitHub et Cloudflare.
 Pour chaque cible, il :
 
 1. télécharge l'archive publique GitHub de la branche configurée en une seule requête ;
-3. lit `wrangler.jsonc` (ou `wrangler.toml`) et convertit ses bindings ;
+3. lit `wrangler.jsonc` et convertit ses bindings ;
 4. bundle les dépendances npm publiques réellement importées, puis envoie les
    assets et les modules à l’API Cloudflare ;
 5. crée le Worker s'il n'existe pas, ou met à jour celui qui existe ;
