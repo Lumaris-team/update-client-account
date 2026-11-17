@@ -86,6 +86,14 @@ test("parses Wrangler bindings", () => {
     [[workflows]]
     name = "grades"
     binding = "GRADES"
+    [[secret_store_secrets]]
+    binding = "MAIN_USERNAME"
+    store_id = "store-id-1"
+    secret_name = "MAIN_USERNAME"
+    [[secret_store_secrets]]
+    binding = "MAIN_PASSWORD"
+    store_id = "store-id-1"
+    secret_name = "MAIN_PASSWORD"
   `);
   assert.equal(config.main, "src/index.js");
   assert.equal(config.vars.MODE, "production");
@@ -93,6 +101,8 @@ test("parses Wrangler bindings", () => {
   assert.deepEqual(config.kv_namespaces[0], { binding: "CACHE", id: "kv-id" });
   assert.deepEqual(config.d1_databases[0], { binding: "DB", database_id: "d1-id" });
   assert.deepEqual(config.workflows[0], { name: "grades", binding: "GRADES" });
+  assert.deepEqual(config.secret_store_secrets[0], { binding: "MAIN_USERNAME", store_id: "store-id-1", secret_name: "MAIN_USERNAME" });
+  assert.deepEqual(config.secret_store_secrets[1], { binding: "MAIN_PASSWORD", store_id: "store-id-1", secret_name: "MAIN_PASSWORD" });
 });
 
 test("includes Wrangler observability settings in deployment metadata", () => {
@@ -111,19 +121,29 @@ test("includes Wrangler observability settings in deployment metadata", () => {
   );
 });
 
-test("does not serialize Secrets Store references as unsupported bindings", () => {
+test("serializes Secrets Store references from wrangler config", () => {
   const metadata = workerMetadata(
     { mainModule: "src/index.js" },
     {
-      secrets_store_secrets: [{
-        binding: "MAIN_PASSWORD",
-        store_id: "store-id",
-        secret_name: "MAIN_PASSWORD",
-      }],
+      secret_store_secrets: [
+        {
+          binding: "MAIN_USERNAME",
+          store_id: "store-id",
+          secret_name: "MAIN_USERNAME",
+        },
+        {
+          binding: "MAIN_PASSWORD",
+          store_id: "store-id",
+          secret_name: "MAIN_PASSWORD",
+        },
+      ],
     },
     undefined
   );
-  assert.deepEqual(metadata.bindings, []);
+  assert.deepEqual(metadata.bindings, [
+    { name: "MAIN_USERNAME", type: "secret_store_secret", store_id: "store-id", secret_name: "MAIN_USERNAME" },
+    { name: "MAIN_PASSWORD", type: "secret_store_secret", store_id: "store-id", secret_name: "MAIN_PASSWORD" },
+  ]);
 });
 
 test("inherits existing bindings during a replacement upload", () => {
