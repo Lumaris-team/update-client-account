@@ -116,7 +116,7 @@ function tomlValue(value) {
 }
 
 export function parseWranglerToml(source) {
-  const config = { vars: {}, kv_namespaces: [], d1_databases: [], workflows: [], secrets_store_secrets: [] };
+  const config = { vars: {}, kv_namespaces: [], d1_databases: [], workflows: [] };
   let section = "";
   let current = null;
   for (const rawLine of source.split(/\r?\n/)) {
@@ -130,7 +130,6 @@ export function parseWranglerToml(source) {
       if (arrayTable && section === "kv_namespaces") config.kv_namespaces.push(current);
       if (arrayTable && section === "d1_databases") config.d1_databases.push(current);
       if (arrayTable && section === "workflows") config.workflows.push(current);
-      if (arrayTable && section === "secrets_store_secrets") config.secrets_store_secrets.push(current);
       continue;
     }
     const separator = line.indexOf("=");
@@ -215,12 +214,6 @@ export function workerMetadata(target, wrangler, assetToken, settings) {
       throw new Error("Every secret text binding needs name and text");
     }
     bindings.push({ type: "secret_text", name: binding.name, text: binding.text });
-  }
-  for (const binding of wrangler.secrets_store_secrets || []) {
-    if (!binding.binding || !binding.store_id || !binding.secret_name) {
-      throw new Error("Every secret store secret binding needs binding, store_id and secret_name");
-    }
-    bindings.push({ name: binding.binding, type: "secret_store_secret", store_id: binding.store_id, secret_name: binding.secret_name });
   }
   if (wrangler.ai?.binding) bindings.push({ name: wrangler.ai.binding, type: "ai" });
   if (assetToken) bindings.push({ name: "ASSETS", type: "assets" });
@@ -366,18 +359,6 @@ function cloudflareHeaders(token) {
   return { Authorization: `Bearer ${token}` };
 }
 
-async function resolveSecretStoreBindings(wrangler, secretStoreId) {
-  const bindings = wrangler.secrets_store_secrets || [];
-  if (!bindings.length || !secretStoreId) return wrangler;
-  return {
-    ...wrangler,
-    secret_store_secrets: bindings.map((binding) => {
-      if (binding.store_id && binding.store_id !== "__SECRET_STORE_ID__") return binding;
-      return { ...binding, store_id: secretStoreId };
-    }),
-  };
-}
-
 async function resolveD1Bindings(wrangler, target, token, fetchImpl) {
   const bindings = wrangler.d1_databases || [];
   if (!bindings.length) return wrangler;
@@ -469,7 +450,7 @@ async function uploadAssets(target, assets, token, fetchImpl) {
 
 export async function updateWorker(
   target,
-  { token, githubToken, accountId, secretStoreId, fetchImpl = fetch } = {}
+  { token, githubToken, accountId, fetchImpl = fetch } = {}
 ) {
   if (!token) throw new Error("CLOUDFLARE_ACCOUNT_TOKEN is not configured");
   target = { ...target, accountId: target.accountId || accountId };
@@ -483,7 +464,6 @@ export async function updateWorker(
     assetsDirectory: (repository.wrangler.assets?.directory || target.assetsDirectory).replace(/^\.\//, ""),
   };
   repository.wrangler = await resolveD1Bindings(repository.wrangler, target, token, fetchImpl);
-  repository.wrangler = await resolveSecretStoreBindings(repository.wrangler, secretStoreId);
   const assets = [...repository.contents.entries()]
     .filter(([path]) => path.startsWith(`${target.assetsDirectory}/`))
     .map(([path, bytes]) => ({ path: path.slice(target.assetsDirectory.length + 1), bytes }));
@@ -521,12 +501,12 @@ export async function updateWorker(
 
 export async function updateWorkers(
   configuration,
-  { token, githubToken, accountId, secretStoreId, fetchImpl = fetch } = {}
+  { token, githubToken, accountId, fetchImpl = fetch } = {}
 ) {
   const results = [];
   for (const target of parseConfiguration(configuration)) {
     try {
-      results.push(await updateWorker(target, { token, githubToken, accountId, secretStoreId, fetchImpl }));
+      results.push(await updateWorker(target, { token, githubToken, accountId, fetchImpl }));
     } catch (error) {
       results.push({ name: target.name, status: "error", error: error instanceof Error ? error.message : String(error) });
     }

@@ -1,0 +1,37 @@
+{
+  // Principal informations
+  "name": "update-client-account",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-19",
+  "workers_dev": true,
+  "compatibility_flags": ["nodejs_compat"],
+
+  "vars": {
+    "CONFIGURATION": "{\"update-client-account\": \"https://github.com/Lumaris-team/update-client-account.git\", \"main-client-worker\": \"https://github.com/Lumaris-team/main-client-worker\", \"login-client-worker\": \"https://github.com/Lumaris-team/login-client-worker\"}"
+  },
+
+  "triggers": {
+    "crons": ["0 2 * * *"]
+  },
+
+  // Static site
+  "assets": {
+    "directory": "./src/frontend",
+    "binding": "ASSETS"
+  },
+
+  // Observability
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  }
+}

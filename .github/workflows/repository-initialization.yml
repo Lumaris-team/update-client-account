@@ -27,9 +27,9 @@ jobs:
           echo "detecting structure..."
           
           # Detect Cloudflare Workers
-          if [ -f "wrangler.toml" ]; then
+          if [ -f "wrangler.jsonc" ]; then
             echo "has_workers=true" >> $GITHUB_OUTPUT
-            WORKER_NAME=$(grep '^name = ' wrangler.toml | head -1 | sed 's/name = //; s/"//g')
+            WORKER_NAME=$(grep '"name"' wrangler.jsonc | head -1 | sed 's/.*"name": *"//; s/".*//')
             echo "worker_name=$WORKER_NAME" >> $GITHUB_OUTPUT
           else
             echo "has_workers=false" >> $GITHUB_OUTPUT
