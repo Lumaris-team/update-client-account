@@ -86,11 +86,11 @@ test("parses Wrangler bindings", () => {
     [[workflows]]
     name = "grades"
     binding = "GRADES"
-    [[secret_store_secrets]]
+    [[secrets_store_secrets]]
     binding = "MAIN_USERNAME"
     store_id = "store-id-1"
     secret_name = "MAIN_USERNAME"
-    [[secret_store_secrets]]
+    [[secrets_store_secrets]]
     binding = "MAIN_PASSWORD"
     store_id = "store-id-1"
     secret_name = "MAIN_PASSWORD"
@@ -101,8 +101,8 @@ test("parses Wrangler bindings", () => {
   assert.deepEqual(config.kv_namespaces[0], { binding: "CACHE", id: "kv-id" });
   assert.deepEqual(config.d1_databases[0], { binding: "DB", database_id: "d1-id" });
   assert.deepEqual(config.workflows[0], { name: "grades", binding: "GRADES" });
-  assert.deepEqual(config.secret_store_secrets[0], { binding: "MAIN_USERNAME", store_id: "store-id-1", secret_name: "MAIN_USERNAME" });
-  assert.deepEqual(config.secret_store_secrets[1], { binding: "MAIN_PASSWORD", store_id: "store-id-1", secret_name: "MAIN_PASSWORD" });
+  assert.deepEqual(config.secrets_store_secrets[0], { binding: "MAIN_USERNAME", store_id: "store-id-1", secret_name: "MAIN_USERNAME" });
+  assert.deepEqual(config.secrets_store_secrets[1], { binding: "MAIN_PASSWORD", store_id: "store-id-1", secret_name: "MAIN_PASSWORD" });
 });
 
 test("includes Wrangler observability settings in deployment metadata", () => {
@@ -125,7 +125,7 @@ test("serializes Secrets Store references from wrangler config", () => {
   const metadata = workerMetadata(
     { mainModule: "src/index.js" },
     {
-      secret_store_secrets: [
+      secrets_store_secrets: [
         {
           binding: "MAIN_USERNAME",
           store_id: "store-id",
