@@ -116,7 +116,7 @@ function tomlValue(value) {
 }
 
 export function parseWranglerToml(source) {
-  const config = { vars: {}, kv_namespaces: [], d1_databases: [], workflows: [], secret_store_secrets: [] };
+  const config = { vars: {}, kv_namespaces: [], d1_databases: [], workflows: [], secrets_store_secrets: [] };
   let section = "";
   let current = null;
   for (const rawLine of source.split(/\r?\n/)) {
@@ -130,7 +130,7 @@ export function parseWranglerToml(source) {
       if (arrayTable && section === "kv_namespaces") config.kv_namespaces.push(current);
       if (arrayTable && section === "d1_databases") config.d1_databases.push(current);
       if (arrayTable && section === "workflows") config.workflows.push(current);
-      if (arrayTable && section === "secret_store_secrets") config.secret_store_secrets.push(current);
+      if (arrayTable && section === "secrets_store_secrets") config.secrets_store_secrets.push(current);
       continue;
     }
     const separator = line.indexOf("=");
@@ -216,7 +216,7 @@ export function workerMetadata(target, wrangler, assetToken, settings) {
     }
     bindings.push({ type: "secret_text", name: binding.name, text: binding.text });
   }
-  for (const binding of wrangler.secret_store_secrets || []) {
+  for (const binding of wrangler.secrets_store_secrets || []) {
     if (!binding.binding || !binding.store_id || !binding.secret_name) {
       throw new Error("Every secret store secret binding needs binding, store_id and secret_name");
     }
@@ -367,7 +367,7 @@ function cloudflareHeaders(token) {
 }
 
 async function resolveSecretStoreBindings(wrangler, secretStoreId) {
-  const bindings = wrangler.secret_store_secrets || [];
+  const bindings = wrangler.secrets_store_secrets || [];
   if (!bindings.length || !secretStoreId) return wrangler;
   return {
     ...wrangler,
