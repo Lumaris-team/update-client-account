@@ -28,6 +28,7 @@ export default {
           token: env.CLOUDFLARE_ACCOUNT_TOKEN,
           githubToken: env.GITHUB_TOKEN,
           accountId: env.CLOUDFLARE_ACCOUNT_ID,
+          secretStoreId: env.SECRET_STORE_ID,
         });
         return new Response(JSON.stringify({ results }), { headers: corsHeaders });
       } catch (error) {
@@ -95,6 +96,7 @@ export default {
         token: env.CLOUDFLARE_ACCOUNT_TOKEN,
         githubToken: env.GITHUB_TOKEN,
         accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        secretStoreId: env.SECRET_STORE_ID,
       }).catch((error) => {
         console.error("SCHEDULED WORKER UPDATE ERROR:", error?.stack || error);
         throw error;
