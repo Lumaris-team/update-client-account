@@ -215,6 +215,19 @@ export function workerMetadata(target, wrangler, assetToken, settings) {
     }
     bindings.push({ type: "secret_text", name: binding.name, text: binding.text });
   }
+  for (const binding of wrangler.secrets_store_secrets || []) {
+    if (!binding.binding || !binding.store_id || !binding.secret_name) {
+      throw new Error(
+        `Every secret store secret binding needs binding, store_id and secret_name (got: ${JSON.stringify(binding)})`
+      );
+    }
+    bindings.push({
+      name: binding.binding,
+      type: "secret_store_secret",
+      store_id: binding.store_id,
+      secret_name: binding.secret_name,
+    });
+  }
   if (wrangler.ai?.binding) bindings.push({ name: wrangler.ai.binding, type: "ai" });
   if (assetToken) bindings.push({ name: "ASSETS", type: "assets" });
   const configuredNames = new Set(bindings.map(({ name }) => name));
@@ -359,6 +372,28 @@ function cloudflareHeaders(token) {
   return { Authorization: `Bearer ${token}` };
 }
 
+async function resolveSecretStoreBindings(wrangler, target, token, fetchImpl) {
+  const bindings = wrangler.secrets_store_secrets || [];
+  if (!bindings.length) return wrangler;
+  const response = await requestJson(
+    `${CLOUDFLARE_API}/accounts/${target.accountId}/secrets_store/stores`,
+    { headers: cloudflareHeaders(token) },
+    fetchImpl
+  );
+  const stores = response.result || [];
+  return {
+    ...wrangler,
+    secrets_store_secrets: bindings.map((binding) => {
+      if (binding.store_id && !binding.store_id.startsWith("__SECRET_STORE_")) return binding;
+      const store = stores.find((item) => item.name === binding.store_name);
+      if (!store?.id) {
+        throw new Error(`Secret store '${binding.store_name}' was not found`);
+      }
+      return { ...binding, store_id: store.id };
+    }),
+  };
+}
+
 async function resolveD1Bindings(wrangler, target, token, fetchImpl) {
   const bindings = wrangler.d1_databases || [];
   if (!bindings.length) return wrangler;
@@ -464,6 +499,7 @@ export async function updateWorker(
     assetsDirectory: (repository.wrangler.assets?.directory || target.assetsDirectory).replace(/^\.\//, ""),
   };
   repository.wrangler = await resolveD1Bindings(repository.wrangler, target, token, fetchImpl);
+  repository.wrangler = await resolveSecretStoreBindings(repository.wrangler, target, token, fetchImpl);
   const assets = [...repository.contents.entries()]
     .filter(([path]) => path.startsWith(`${target.assetsDirectory}/`))
     .map(([path, bytes]) => ({ path: path.slice(target.assetsDirectory.length + 1), bytes }));
