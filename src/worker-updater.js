@@ -217,9 +217,16 @@ export function workerMetadata(target, wrangler, assetToken, settings) {
     bindings.push({ type: "secret_text", name: binding.name, text: binding.text });
   }
   for (const binding of wrangler.secrets_store_secrets || []) {
-    if (!binding.binding) {
-      throw new Error("Every Secret Store binding needs a binding name");
+    if (!binding.binding || !binding.store_id || !binding.secret_name) {
+      throw new Error("Every Secret Store binding needs binding, store_id and secret_name");
     }
+    console.error("[UPDATE-CLIENT] workerMetadata: adding secret_store_secret binding name=" + binding.binding + " store_id=" + binding.store_id + " secret_name=" + binding.secret_name);
+    bindings.push({
+      name: binding.binding,
+      type: "secret_store_secret",
+      store_id: binding.store_id,
+      secret_name: binding.secret_name,
+    });
   }
   if (wrangler.ai?.binding) bindings.push({ name: wrangler.ai.binding, type: "ai" });
   if (assetToken) bindings.push({ name: "ASSETS", type: "assets" });
@@ -368,20 +375,27 @@ function cloudflareHeaders(token) {
 async function resolveSecretStoreBindings(wrangler, target, token, fetchImpl) {
   const bindings = wrangler.secrets_store_secrets || [];
   if (!bindings.length) return wrangler;
+  console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: " + bindings.length + " secret store binding(s) found");
   const response = await requestJson(
-    `${CLOUDFLARE_API}/accounts/${target.accountId}/secrets_store/stores`,
+    CLOUDFLARE_API + "/accounts/" + target.accountId + "/secrets_store/stores",
     { headers: cloudflareHeaders(token) },
     fetchImpl
   );
   const stores = response.result || [];
+  console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: " + stores.length + " secret store(s) found in account");
+  stores.forEach((s) => console.error("[UPDATE-CLIENT]   store: name=" + s.name + " id=" + s.id));
   return {
     ...wrangler,
     secrets_store_secrets: bindings.map((binding) => {
-      if (binding.store_id && !binding.store_id.startsWith("__SECRET_STORE_")) return binding;
-      const store = stores.find((item) => item.name === binding.store_name);
-      if (!store?.id) {
-        throw new Error(`Secret store '${binding.store_name}' was not found`);
+      if (binding.store_id && !binding.store_id.startsWith("__SECRET_STORE_")) {
+        console.error("[UPDATE-CLIENT]   binding " + binding.binding + ": store_id already set to " + binding.store_id);
+        return binding;
       }
+      const store = stores.find((item) => item.name === binding.store_id || item.id === binding.store_id);
+      if (!store?.id) {
+        throw new Error("Secret store for binding " + binding.binding + " (store_id/store_name=" + binding.store_id + ") was not found");
+      }
+      console.error("[UPDATE-CLIENT]   binding " + binding.binding + ": resolved store_id=" + store.id);
       return { ...binding, store_id: store.id };
     }),
   };
@@ -476,6 +490,20 @@ async function uploadAssets(target, assets, token, fetchImpl) {
   return session.result.jwt;
 }
 
+async function injectSecrets(target, token, secretValues, fetchImpl) {
+  if (!secretValues || Object.keys(secretValues).length === 0) return;
+  const body = JSON.stringify(Object.entries(secretValues).map(([name, value]) => ({ name, value })));
+  const response = await fetchImpl(
+    CLOUDFLARE_API + "/accounts/" + target.accountId + "/workers/scripts/" + encodeURIComponent(target.worker) + "/secrets",
+    { method: "PUT", headers: cloudflareHeaders(token), body }
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error("Failed to inject secrets for " + target.worker + ": " + response.status + " " + text);
+  }
+  console.error("[UPDATE-CLIENT] injectSecrets: injected " + Object.keys(secretValues).length + " secret(s) for " + target.worker);
+}
+
 export async function updateWorker(
   target,
   { token, githubToken, accountId, fetchImpl = fetch } = {}
@@ -517,6 +545,7 @@ export async function updateWorker(
     { method: "PUT", headers: cloudflareHeaders(token), body: form },
     fetchImpl
   );
+  await injectSecrets(target, token, target.secretValues, fetchImpl);
   const workersDevUrl = await enableWorkerSubdomain(target, token, fetchImpl);
   return {
     name: target.name,
