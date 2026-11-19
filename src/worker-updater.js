@@ -213,20 +213,13 @@ export function workerMetadata(target, wrangler, assetToken, settings) {
     if (!binding.name || typeof binding.text !== "string") {
       throw new Error("Every secret text binding needs name and text");
     }
+    if (binding.text === "") continue;
     bindings.push({ type: "secret_text", name: binding.name, text: binding.text });
   }
   for (const binding of wrangler.secrets_store_secrets || []) {
-    if (!binding.binding || !binding.store_id || !binding.secret_name) {
-      throw new Error(
-        `Every secret store secret binding needs binding, store_id and secret_name (got: ${JSON.stringify(binding)})`
-      );
+    if (!binding.binding) {
+      throw new Error("Every Secret Store binding needs a binding name");
     }
-    bindings.push({
-      name: binding.binding,
-      type: "secret_store_secret",
-      store_id: binding.store_id,
-      secret_name: binding.secret_name,
-    });
   }
   if (wrangler.ai?.binding) bindings.push({ name: wrangler.ai.binding, type: "ai" });
   if (assetToken) bindings.push({ name: "ASSETS", type: "assets" });
