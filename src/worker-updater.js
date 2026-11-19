@@ -490,20 +490,6 @@ async function uploadAssets(target, assets, token, fetchImpl) {
   return session.result.jwt;
 }
 
-async function injectSecrets(target, token, secretValues, fetchImpl) {
-  if (!secretValues || Object.keys(secretValues).length === 0) return;
-  const body = JSON.stringify(Object.entries(secretValues).map(([name, value]) => ({ name, value })));
-  const response = await fetchImpl(
-    CLOUDFLARE_API + "/accounts/" + target.accountId + "/workers/scripts/" + encodeURIComponent(target.worker) + "/secrets",
-    { method: "PUT", headers: cloudflareHeaders(token), body }
-  );
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error("Failed to inject secrets for " + target.worker + ": " + response.status + " " + text);
-  }
-  console.error("[UPDATE-CLIENT] injectSecrets: injected " + Object.keys(secretValues).length + " secret(s) for " + target.worker);
-}
-
 export async function updateWorker(
   target,
   { token, githubToken, accountId, fetchImpl = fetch } = {}
@@ -545,7 +531,6 @@ export async function updateWorker(
     { method: "PUT", headers: cloudflareHeaders(token), body: form },
     fetchImpl
   );
-  await injectSecrets(target, token, target.secretValues, fetchImpl);
   const workersDevUrl = await enableWorkerSubdomain(target, token, fetchImpl);
   return {
     name: target.name,
