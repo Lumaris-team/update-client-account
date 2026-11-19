@@ -14,6 +14,19 @@
     "crons": ["0 2 * * *"]
   },
 
+  // Secret text bindings — valeurs configurées une fois dans Cloudflare Dashboard
+  // Workers & Pages > update-client-account > Settings > Secrets
+  "secret_texts": [
+    {
+      "name": "MAIN_USERNAME",
+      "text": ""
+    },
+    {
+      "name": "MAIN_PASSWORD",
+      "text": ""
+    }
+  ],
+
   // Static site
   "assets": {
     "directory": "./src/frontend",

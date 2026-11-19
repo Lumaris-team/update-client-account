@@ -111,7 +111,7 @@ test("includes Wrangler observability settings in deployment metadata", () => {
   );
 });
 
-test("does not serialize Secrets Store references as unsupported bindings", () => {
+test("serializes Secrets Store references as secret_store_secret bindings", () => {
   const metadata = workerMetadata(
     { mainModule: "src/index.js" },
     {
@@ -123,7 +123,12 @@ test("does not serialize Secrets Store references as unsupported bindings", () =
     },
     undefined
   );
-  assert.deepEqual(metadata.bindings, []);
+  assert.deepEqual(metadata.bindings, [{
+    name: "MAIN_PASSWORD",
+    type: "secret_store_secret",
+    store_id: "store-id",
+    secret_name: "MAIN_PASSWORD",
+  }]);
 });
 
 test("does not deploy empty secret text placeholders", () => {

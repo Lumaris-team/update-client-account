@@ -24,10 +24,14 @@ export default {
       }
 
       try {
+        const secretValues = {};
+        if (env.MAIN_USERNAME) secretValues.MAIN_USERNAME = env.MAIN_USERNAME;
+        if (env.MAIN_PASSWORD) secretValues.MAIN_PASSWORD = env.MAIN_PASSWORD;
         const results = await updateWorkers(env.CONFIGURATION, {
           token: env.CLOUDFLARE_ACCOUNT_TOKEN,
           githubToken: env.GITHUB_TOKEN,
           accountId: env.CLOUDFLARE_ACCOUNT_ID,
+          secretValues,
         });
         return new Response(JSON.stringify({ results }), { headers: corsHeaders });
       } catch (error) {
@@ -90,11 +94,15 @@ export default {
   },
 
   async scheduled(controller, env, ctx) {
+    const secretValues = {};
+    if (env.MAIN_USERNAME) secretValues.MAIN_USERNAME = env.MAIN_USERNAME;
+    if (env.MAIN_PASSWORD) secretValues.MAIN_PASSWORD = env.MAIN_PASSWORD;
     ctx.waitUntil(
       updateWorkers(env.CONFIGURATION, {
         token: env.CLOUDFLARE_ACCOUNT_TOKEN,
         githubToken: env.GITHUB_TOKEN,
         accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        secretValues,
       }).catch((error) => {
         console.error("SCHEDULED WORKER UPDATE ERROR:", error?.stack || error);
         throw error;
