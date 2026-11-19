@@ -384,16 +384,38 @@ async function resolveSecretStoreBindings(wrangler, target, token, fetchImpl) {
   const stores = response.result || [];
   console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: " + stores.length + " secret store(s) found in account");
   stores.forEach((s) => console.error("[UPDATE-CLIENT]   store: name=" + s.name + " id=" + s.id));
+  
+  let store = null;
+  if (stores.length === 0) {
+    console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: no secret store found, creating default store");
+    const createResponse = await requestJson(
+      CLOUDFLARE_API + "/accounts/" + target.accountId + "/secrets_store/stores",
+      { method: "POST", headers: cloudflareHeaders(token), body: JSON.stringify({ name: "lumaris-default-store" }) },
+      fetchImpl
+    );
+    if (!createResponse.ok) {
+      throw new Error("Failed to create default secret store: " + createResponse.status);
+    }
+    const created = createResponse.result;
+    store = created.result || created;
+    console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: created default secret store: name=" + store.name + " id=" + store.id);
+  } else if (stores.length === 1) {
+    store = stores[0];
+    console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: using single secret store: name=" + store.name + " id=" + store.id);
+  } else {
+    store = stores.find((item) => item.name === binding.store_id || item.id === binding.store_id);
+    if (!store?.id) {
+      store = stores[0];
+      console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: multiple stores found, using first: name=" + store.name + " id=" + store.id);
+    }
+  }
+  
   return {
     ...wrangler,
     secrets_store_secrets: bindings.map((binding) => {
       if (binding.store_id && !binding.store_id.startsWith("__SECRET_STORE_")) {
         console.error("[UPDATE-CLIENT]   binding " + binding.binding + ": store_id already set to " + binding.store_id);
         return binding;
-      }
-      const store = stores.find((item) => item.name === binding.store_id || item.id === binding.store_id);
-      if (!store?.id) {
-        throw new Error("Secret store for binding " + binding.binding + " (store_id/store_name=" + binding.store_id + ") was not found");
       }
       console.error("[UPDATE-CLIENT]   binding " + binding.binding + ": resolved store_id=" + store.id);
       return { ...binding, store_id: store.id };
