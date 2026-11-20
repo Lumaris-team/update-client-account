@@ -545,9 +545,8 @@ async function deployWorkerViaApi(accountId, token, workerName, scriptContent, {
   
   // Prepare the request options
   const requestOptions = {
-    method: "POST",
+    method: "PATCH",
     headers: {
-      "Authorization": `Bearer ${token}`,
       "Content-Type": "application/javascript",
       ...(mainModule ? { "Main-Module": mainModule } : {}),
       ...(assetsDirectory ? { "Assets-Directory": assetsDirectory } : {}),
