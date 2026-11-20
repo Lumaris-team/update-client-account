@@ -523,6 +523,58 @@ async function uploadAssets(target, assets, token, fetchImpl) {
   return session.result.jwt;
 }
 
+/**
+ * Deploy a Cloudflare Worker using the Cloudflare API.
+ * Replaces the need for `npx wrangler deploy` in the worker runtime.
+ * 
+ * @param {string} accountId - Cloudflare account ID
+ * @param {string} token - CLOUDFLARE_ACCOUNT_TOKEN for authentication
+ * @param {string} workerName - Name of the worker script
+ * @param {string} scriptContent - The new worker script content (JavaScript)
+ * @param {Object} [options] - Additional options
+ * @param {string} [options.mainModule] - Main module path (wrangler.toml setting)
+ * @param {string} [options.assetsDirectory] - Assets directory path
+ * @returns {Promise<Object>} Deployment result with status and SHA
+ */
+async function deployWorkerViaApi(accountId, token, workerName, scriptContent, {
+  mainModule,
+  assetsDirectory,
+} = {}) {
+  // Construct the API endpoint for updating worker script content
+  const url = `${CLOUDFLARE_API}/accounts/${accountId}/workers/scripts/${workerName}/content`;
+  
+  // Prepare the request options
+  const requestOptions = {
+    method: "PATCH",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/javascript",
+      ...(mainModule ? { "Main-Module": mainModule } : {}),
+      ...(assetsDirectory ? { "Assets-Directory": assetsDirectory } : {}),
+    },
+    body: scriptContent,
+  };
+  
+  // Make the API call to deploy the worker
+  const response = await fetch(url, requestOptions);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Cloudflare API error (${response.status}): ${errorText}`);
+  }
+  
+  const result = await response.json();
+  
+  // Return deployment result
+  return {
+    name: workerName,
+    status: "updated",
+    sha: result.sha || undefined,
+    worker: workerName,
+    deploymentId: result.id || undefined,
+  };
+}
+
 export async function updateWorker(
   target,
   { token, githubToken, accountId, fetchImpl = fetch } = {}
@@ -552,25 +604,33 @@ export async function updateWorker(
       path !== "package.json" &&
       !path.startsWith(`${target.assetsDirectory}/`)
     );
-  const deployResult = await new Promise((resolve, reject) => {
-    const { execSync } = require("child_process");
-    try {
-      const result = execSync(
-        "npx wrangler deploy --env production",
-        { cwd: "/Users/danielersen/Projets/Lumaris/update-client-account",
-          env: { CLOUDFLARE_ACCOUNT_TOKEN: token, ...process.env } }
-      );
-      resolve(result.toString());
-    } catch (e) {
-      reject(e.toString());
+  // Get the main worker module content for deployment
+  let scriptContent = "";
+  const mainModulePath = repository.wrangler.main || "src/index.js";
+  if (repository.contents.has(mainModulePath)) {
+    scriptContent = new TextDecoder().decode(repository.contents.get(mainModulePath));
+  } else if (repository.contents.has("src/index.js")) {
+    scriptContent = new TextDecoder().decode(repository.contents.get("src/index.js"));
+  }
+
+  // Deploy the worker via Cloudflare API (replaces npx wrangler deploy)
+  const deployResult = await deployWorkerViaApi(
+    accountId,
+    token,
+    target.name,
+    scriptContent,
+    {
+      mainModule: mainModulePath,
+      assetsDirectory: target.assetsDirectory || "",
     }
-  });
-  console.error("[UPDATE-CLIENT] wrangler deploy termine : " + deployResult);
+  );
+  console.error("[UPDATE-CLIENT] worker deploy termine : " + JSON.stringify(deployResult));
   return {
     name: target.name,
     status: existed ? "updated" : "created",
     sha: repository.sha,
     worker: target.worker,
+    deployResult,
   };}
 
 export async function updateWorkers(
