@@ -220,7 +220,6 @@ export function workerMetadata(target, wrangler, assetToken, settings) {
     if (!binding.binding || !binding.store_id || !binding.secret_name) {
       throw new Error("Every Secret Store binding needs binding, store_id and secret_name");
     }
-    console.error("[UPDATE-CLIENT] workerMetadata: adding secret_store_secret binding name=" + binding.binding + " store_id=" + binding.store_id + " secret_name=" + binding.secret_name);
     bindings.push({
       name: binding.binding,
       type: "secret_store_secret",
@@ -271,6 +270,25 @@ async function readLatestVersion(target, token, fetchImpl) {
   if (!response.ok) return null;
   const body = await response.json();
   return Array.isArray(body.result) ? body.result[0] || null : null;
+}
+
+async function verifySecretStoreBindings(target, wrangler, token, latestVersion, fetchImpl) {
+  const required = wrangler.secrets_store_secrets || [];
+  if (!required.length) return;
+  const bindings = existingBindings(latestVersion);
+  if (!bindings.length) {
+    throw new Error(
+      `Cloudflare did not report bindings for ${target.worker}; expected MAIN_USERNAME and MAIN_PASSWORD`
+    );
+  }
+  const names = new Set(bindings.map((binding) => binding.name));
+  for (const binding of required) {
+    if (!names.has(binding.binding)) {
+      throw new Error(
+        `Secret Store binding '${binding.binding}' was missing after deploying ${target.worker}`
+      );
+    }
+  }
 }
 
 function githubHeaders(token) {
@@ -375,49 +393,42 @@ function cloudflareHeaders(token) {
 async function resolveSecretStoreBindings(wrangler, target, token, fetchImpl) {
   const bindings = wrangler.secrets_store_secrets || [];
   if (!bindings.length) return wrangler;
-  console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: " + bindings.length + " secret store binding(s) found");
   const response = await requestJson(
     CLOUDFLARE_API + "/accounts/" + target.accountId + "/secrets_store/stores",
     { headers: cloudflareHeaders(token) },
     fetchImpl
   );
   const stores = response.result || [];
-  console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: " + stores.length + " secret store(s) found in account");
-  stores.forEach((s) => console.error("[UPDATE-CLIENT]   store: name=" + s.name + " id=" + s.id));
   
   let store = null;
   if (stores.length === 0) {
-    console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: no secret store found, creating default store");
-    const createResponse = await requestJson(
-      CLOUDFLARE_API + "/accounts/" + target.accountId + "/secrets_store/stores",
-      { method: "POST", headers: cloudflareHeaders(token), body: JSON.stringify({ name: "lumaris-default-store" }) },
-      fetchImpl
-    );
-    if (!createResponse.ok) {
-      throw new Error("Failed to create default secret store: " + createResponse.status);
-    }
-    const created = createResponse.result;
-    store = created.result || created;
-    console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: created default secret store: name=" + store.name + " id=" + store.id);
+    throw new Error("No Secrets Store exists in the Cloudflare account");
   } else if (stores.length === 1) {
     store = stores[0];
-    console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: using single secret store: name=" + store.name + " id=" + store.id);
   } else {
-    store = stores.find((item) => item.name === binding.store_id || item.id === binding.store_id);
-    if (!store?.id) {
-      store = stores[0];
-      console.error("[UPDATE-CLIENT] resolveSecretStoreBindings: multiple stores found, using first: name=" + store.name + " id=" + store.id);
+    store = stores.find((item) => bindings.some((binding) =>
+      binding.store_id === item.id || binding.store_id === item.name
+    )) || stores[0];
+  }
+  if (!store?.id) throw new Error("Could not resolve the Secrets Store ID");
+
+  const secretsResponse = await requestJson(
+    CLOUDFLARE_API + "/accounts/" + target.accountId + "/secrets_store/stores/" + encodeURIComponent(store.id) + "/secrets",
+    { headers: cloudflareHeaders(token) },
+    fetchImpl
+  );
+  const availableSecrets = secretsResponse.result || [];
+  for (const binding of bindings) {
+    if (!availableSecrets.some((secret) => secret.name === binding.secret_name)) {
+      throw new Error(
+        `Secret Store secret '${binding.secret_name}' was not found for binding '${binding.binding}'`
+      );
     }
   }
   
   return {
     ...wrangler,
     secrets_store_secrets: bindings.map((binding) => {
-      if (binding.store_id && !binding.store_id.startsWith("__SECRET_STORE_")) {
-        console.error("[UPDATE-CLIENT]   binding " + binding.binding + ": store_id already set to " + binding.store_id);
-        return binding;
-      }
-      console.error("[UPDATE-CLIENT]   binding " + binding.binding + ": resolved store_id=" + store.id);
       return { ...binding, store_id: store.id };
     }),
   };
@@ -553,6 +564,8 @@ export async function updateWorker(
     { method: "PUT", headers: cloudflareHeaders(token), body: form },
     fetchImpl
   );
+  const latestVersion = await readLatestVersion(target, token, fetchImpl);
+  await verifySecretStoreBindings(target, repository.wrangler, token, latestVersion, fetchImpl);
   const workersDevUrl = await enableWorkerSubdomain(target, token, fetchImpl);
   return {
     name: target.name,
