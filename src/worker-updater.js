@@ -548,7 +548,7 @@ async function deployWorkerViaApi(accountId, token, workerName, scriptContent, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/javascript",
-      "Authorization": `Bearer ${token}`,
+      "X-Auth-Key": token,
       ...(mainModule ? { "Main-Module": mainModule } : {}),
       ...(assetsDirectory ? { "Assets-Directory": assetsDirectory } : {}),
     },
