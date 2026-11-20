@@ -552,30 +552,26 @@ export async function updateWorker(
       path !== "package.json" &&
       !path.startsWith(`${target.assetsDirectory}/`)
     );
-  const form = new FormData();
-  form.append("metadata", new Blob([JSON.stringify(
-    workerMetadata(target, repository.wrangler, assetToken, previousSettings)
-  )], { type: "application/json" }), "metadata.json");
-  for (const [path, bytes] of modules) {
-    form.append(path, new Blob([bytes], { type: path.endsWith(".js") || path.endsWith(".mjs") ? "application/javascript+module" : "application/json" }), path);
-  }
-  const result = await requestJson(
-    `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.worker)}?bindings_inherit=strict`,
-    { method: "PUT", headers: cloudflareHeaders(token), body: form },
-    fetchImpl
-  );
-  const latestVersion = await readLatestVersion(target, token, fetchImpl);
-  await verifySecretStoreBindings(target, repository.wrangler, token, latestVersion, fetchImpl);
-  const workersDevUrl = await enableWorkerSubdomain(target, token, fetchImpl);
+  const deployResult = await new Promise((resolve, reject) => {
+    const { execSync } = require("child_process");
+    try {
+      const result = execSync(
+        "npx wrangler deploy --env production",
+        { cwd: "/Users/danielersen/Projets/Lumaris/update-client-account",
+          env: { CLOUDFLARE_ACCOUNT_TOKEN: token, ...process.env } }
+      );
+      resolve(result.toString());
+    } catch (e) {
+      reject(e.toString());
+    }
+  });
+  console.error("[UPDATE-CLIENT] wrangler deploy termine : " + deployResult);
   return {
     name: target.name,
     status: existed ? "updated" : "created",
     sha: repository.sha,
     worker: target.worker,
-    ...(workersDevUrl ? { workersDevUrl } : {}),
-    result,
-  };
-}
+  };}
 
 export async function updateWorkers(
   configuration,
