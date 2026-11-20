@@ -20,6 +20,25 @@
     "binding": "ASSETS"
   },
 
+  // Secret Store configuration
+  "secrets_store_secrets": [
+    {
+      "binding": "CLOUDFLARE_ACCOUNT_TOKEN",
+      "store_id": "__SECRET_STORE_ID__",
+      "secret_name": "CLOUDFLARE_ACCOUNT_TOKEN"
+    },
+    {
+      "binding": "GITHUB_TOKEN",
+      "store_id": "__SECRET_STORE_ID__",
+      "secret_name": "GITHUB_TOKEN"
+    },
+    {
+      "binding": "CLOUDFLARE_ACCOUNT_ID",
+      "store_id": "__SECRET_STORE_ID__",
+      "secret_name": "CLOUDFLARE_ACCOUNT_ID"
+    }
+  ],
+
   // Observability
   "observability": {
     "enabled": true,
