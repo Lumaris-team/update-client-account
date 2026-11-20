@@ -571,29 +571,9 @@ export async function updateWorker(
     fetchImpl
   );
   const latestVersion = await readLatestVersion(target, token, fetchImpl);
-  // Utilisation de wrangler deploy pour gérer secret_store_secrets nativement
-  // (l'API REST directe renvoie erreur 10021)
-  const deployResult = await new Promise((resolve, reject) => {
-    const { execSync } = require("child_process");
-    try {
-      const result = execSync(
-        "npx wrangler deploy --env production",
-        { cwd: "/Users/danielersen/Projets/Lumaris/update-client-account",
-          env: { CLOUDFLARE_ACCOUNT_TOKEN: token, ...process.env } }
-      );
-      resolve(result.toString());
-    } catch (e) {
-      reject(e.toString());
-    }
-  });
-  console.error("[UPDATE-CLIENT] wrangler deploy termine : " + deployResult);
-  
+  await verifySecretStoreBindings(target, repository.wrangler, token, latestVersion, fetchImpl);
+  const workersDevUrl = await enableWorkerSubdomain(target, token, fetchImpl);
   return {
-    name: target.name,
-    status: existed ? "updated" : "created",
-    sha: repository.sha,
-    worker: target.worker,
-  };
     name: target.name,
     status: existed ? "updated" : "created",
     sha: repository.sha,
