@@ -222,7 +222,7 @@ export function workerMetadata(target, wrangler, assetToken, settings) {
     }
     bindings.push({
       name: binding.binding,
-      type: "secret_store_secret",
+      type: "secrets_store_secret",
       store_id: binding.store_id,
       secret_name: binding.secret_name,
     });
@@ -548,15 +548,9 @@ export async function updateWorker(
     .filter(([path]) =>
       SOURCE_EXTENSIONS.has(path.slice(path.lastIndexOf("."))) &&
       path !== "wrangler.toml" &&
-  // Lancement de wrangler deploy qui gère nativement secret_store_secrets
-  // (l'API REST directe renvoie erreur 10021)
-  const deployResult = await new Promise((resolve, reject) => {
-    const { execSync } = require("child_process");
-    try {
-      const result = execSync(
-        "npx wrangler deploy --env production",
-        { cwd: "/Users/danielersen/Projets/Lumaris/update-client-account",
-          env: { CLOUDFLARE_ACCOUNT_TOKEN: token, ...process.env } }
+      path !== "wrangler.jsonc" &&
+      path !== "package.json" &&
+      !path.startsWith(`${target.assetsDirectory}/`)
     );
   const form = new FormData();
   form.append("metadata", new Blob([JSON.stringify(

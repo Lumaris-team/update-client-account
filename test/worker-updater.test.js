@@ -111,7 +111,7 @@ test("includes Wrangler observability settings in deployment metadata", () => {
   );
 });
 
-test("serializes Secrets Store references as secret_store_secret bindings", () => {
+test("serializes Secrets Store references as secrets_store_secret bindings", () => {
   const metadata = workerMetadata(
     { mainModule: "src/index.js" },
     {
@@ -125,7 +125,7 @@ test("serializes Secrets Store references as secret_store_secret bindings", () =
   );
   assert.deepEqual(metadata.bindings, [{
     name: "MAIN_PASSWORD",
-    type: "secret_store_secret",
+    type: "secrets_store_secret",
     store_id: "store-id",
     secret_name: "MAIN_PASSWORD",
   }]);
@@ -153,8 +153,8 @@ test("inherits existing bindings during a replacement upload", () => {
     {
       result: {
         bindings: [
-          { name: "MAIN_USERNAME", type: "secret_store_secret" },
-          { name: "MAIN_PASSWORD", type: "secret_store_secret" },
+          { name: "MAIN_USERNAME", type: "secrets_store_secret" },
+          { name: "MAIN_PASSWORD", type: "secrets_store_secret" },
         ],
       },
     }
