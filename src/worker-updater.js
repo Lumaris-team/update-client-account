@@ -387,6 +387,9 @@ function md5(bytes) {
 }
 
 function cloudflareHeaders(token) {
+  if (!token) {
+    throw new Error("CLOUDFLARE_ACCOUNT_TOKEN is not configured");
+  }
   return { Authorization: `Bearer ${token}` };
 }
 
