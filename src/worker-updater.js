@@ -587,6 +587,17 @@ export async function updateWorker(
     mainModule: repository.wrangler.main || target.mainModule,
     assetsDirectory: (repository.wrangler.assets?.directory || target.assetsDirectory).replace(/^\.\//, ""),
   };
+  
+  // Generate random JWT secret for login-client-worker
+  if (target.worker === "login-client-worker") {
+    const jwtSecret = crypto.randomUUID() + crypto.randomUUID();
+    if (repository.wrangler.vars) {
+      repository.wrangler.vars.JWT_SECRET_KEY = jwtSecret;
+    } else {
+      repository.wrangler.vars = { JWT_SECRET_KEY: jwtSecret };
+    }
+  }
+  
   repository.wrangler = await resolveD1Bindings(repository.wrangler, target, token, fetchImpl);
   repository.wrangler = await resolveSecretStoreBindings(repository.wrangler, target, token, fetchImpl);
   const assets = [...repository.contents.entries()]
