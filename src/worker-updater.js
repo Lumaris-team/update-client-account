@@ -572,9 +572,22 @@ async function deployWorkerViaApi(accountId, token, workerName, modules, metadat
   };
 }
 
+// Workers that share the deployment-generated JWT signing secret.
+const JWT_AUTH_WORKERS = new Set(["login-client-worker", "main-client-worker"]);
+
+function injectJwtSecret(wrangler, jwtSecret) {
+  return {
+    ...wrangler,
+    vars: {
+      ...(wrangler.vars || {}),
+      JWT_SECRET_KEY: jwtSecret,
+    },
+  };
+}
+
 export async function updateWorker(
   target,
-  { token, githubToken, accountId, fetchImpl = fetch } = {}
+  { token, githubToken, accountId, jwtSecret, fetchImpl = fetch } = {}
 ) {
   if (!token) throw new Error("CLOUDFLARE_ACCOUNT_TOKEN is not configured");
   target = { ...target, accountId: target.accountId || accountId };
@@ -589,6 +602,9 @@ export async function updateWorker(
   };
   repository.wrangler = await resolveD1Bindings(repository.wrangler, target, token, fetchImpl);
   repository.wrangler = await resolveSecretStoreBindings(repository.wrangler, target, token, fetchImpl);
+  if (jwtSecret && JWT_AUTH_WORKERS.has(target.name)) {
+    repository.wrangler = injectJwtSecret(repository.wrangler, jwtSecret);
+  }
   const assets = [...repository.contents.entries()]
     .filter(([path]) => path.startsWith(`${target.assetsDirectory}/`))
     .map(([path, bytes]) => ({ path: path.slice(target.assetsDirectory.length + 1), bytes }));
@@ -632,9 +648,11 @@ export async function updateWorkers(
   { token, githubToken, accountId, fetchImpl = fetch } = {}
 ) {
   const results = [];
+  // Fresh JWT signing secret per deployment run, shared by the auth workers.
+  const jwtSecret = `${crypto.randomUUID()}${crypto.randomUUID()}`;
   for (const target of parseConfiguration(configuration)) {
     try {
-      results.push(await updateWorker(target, { token, githubToken, accountId, fetchImpl }));
+      results.push(await updateWorker(target, { token, githubToken, accountId, jwtSecret, fetchImpl }));
     } catch (error) {
       results.push({ name: target.name, status: "error", error: error instanceof Error ? error.message : String(error) });
     }
