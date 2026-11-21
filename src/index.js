@@ -28,6 +28,13 @@ export default {
         console.log("DEBUG: CLOUDFLARE_ACCOUNT_TOKEN exists:", !!env.CLOUDFLARE_ACCOUNT_TOKEN);
         console.log("DEBUG: CLOUDFLARE_ACCOUNT_ID exists:", !!env.CLOUDFLARE_ACCOUNT_ID);
         
+        if (!env.CLOUDFLARE_ACCOUNT_TOKEN) {
+          throw new Error("CLOUDFLARE_ACCOUNT_TOKEN is not configured in worker secrets");
+        }
+        if (!env.CLOUDFLARE_ACCOUNT_ID) {
+          throw new Error("CLOUDFLARE_ACCOUNT_ID is not configured in worker secrets");
+        }
+        
         const results = await updateWorkers(env.CONFIGURATION, {
           token: env.CLOUDFLARE_ACCOUNT_TOKEN,
           githubToken: env.GITHUB_TOKEN,
