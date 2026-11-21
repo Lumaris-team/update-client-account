@@ -24,6 +24,10 @@ export default {
       }
 
       try {
+        console.log("DEBUG: env keys:", Object.keys(env));
+        console.log("DEBUG: CLOUDFLARE_ACCOUNT_TOKEN exists:", !!env.CLOUDFLARE_ACCOUNT_TOKEN);
+        console.log("DEBUG: CLOUDFLARE_ACCOUNT_ID exists:", !!env.CLOUDFLARE_ACCOUNT_ID);
+        
         const results = await updateWorkers(env.CONFIGURATION, {
           token: env.CLOUDFLARE_ACCOUNT_TOKEN,
           githubToken: env.GITHUB_TOKEN,

@@ -20,8 +20,6 @@
     "binding": "ASSETS"
   },
 
-  
-
   // Observability
   "observability": {
     "enabled": true,

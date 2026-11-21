@@ -525,38 +525,35 @@ async function uploadAssets(target, assets, token, fetchImpl) {
 
 /**
  * Deploy a Cloudflare Worker using the Cloudflare API.
- * Replaces the need for `npx wrangler deploy` in the worker runtime.
- * 
- * @param {string} accountId - Cloudflare account ID
- * @param {string} token - CLOUDFLARE_ACCOUNT_TOKEN for authentication
- * @param {string} workerName - Name of the worker script
- * @param {string} scriptContent - The new worker script content (JavaScript)
- * @param {Object} [options] - Additional options
- * @param {string} [options.mainModule] - Main module path (wrangler.toml setting)
- * @param {string} [options.assetsDirectory] - Assets directory path
- * @returns {Promise<Object>} Deployment result with status and SHA
+ * Uses multipart/form-data with metadata and all module file parts.
  */
-async function deployWorkerViaApi(accountId, token, workerName, scriptContent, {
-  mainModule,
-  assetsDirectory,
-} = {}) {
-  // Construct the API endpoint for updating worker script content
-  const url = `${CLOUDFLARE_API}/accounts/${accountId}/workers/scripts/${workerName}/content`;
+async function deployWorkerViaApi(accountId, token, workerName, modules, metadata) {
+  const scriptUrl = `${CLOUDFLARE_API}/accounts/${accountId}/workers/scripts/${encodeURIComponent(workerName)}`;
   
-  // Prepare the request options
-  const requestOptions = {
-    method: "PATCH",
+  // Create multipart form data
+  const formData = new FormData();
+  const moduleName = metadata?.main_module || "src/index.js";
+  
+  // Add metadata part
+  const metadataBlob = new Blob([JSON.stringify({
+    ...(metadata || {}),
+    "main_module": moduleName,
+  })], { type: "application/json" });
+  formData.append("metadata", metadataBlob);
+  
+  // Add all module file parts with correct content type
+  for (const module of modules) {
+    const moduleBlob = new Blob([module.content], { type: "application/javascript+module" });
+    formData.append(module.name, moduleBlob);
+  }
+  
+  const response = await fetch(scriptUrl, {
+    method: "PUT",
     headers: {
-      "Content-Type": "application/javascript",
-      "X-Auth-Key": token,
-      ...(mainModule ? { "Main-Module": mainModule } : {}),
-      ...(assetsDirectory ? { "Assets-Directory": assetsDirectory } : {}),
+      ...cloudflareHeaders(token),
     },
-    body: scriptContent,
-  };
-  
-  // Make the API call to deploy the worker
-  const response = await fetch(url, requestOptions);
+    body: formData,
+  });
   
   if (!response.ok) {
     const errorText = await response.text();
@@ -565,13 +562,10 @@ async function deployWorkerViaApi(accountId, token, workerName, scriptContent, {
   
   const result = await response.json();
   
-  // Return deployment result
   return {
     name: workerName,
     status: "updated",
-    sha: result.sha || undefined,
     worker: workerName,
-    deploymentId: result.id || undefined,
   };
 }
 
@@ -596,6 +590,11 @@ export async function updateWorker(
     .filter(([path]) => path.startsWith(`${target.assetsDirectory}/`))
     .map(([path, bytes]) => ({ path: path.slice(target.assetsDirectory.length + 1), bytes }));
   const assetToken = await uploadAssets(target, assets, token, fetchImpl);
+  
+  // Deploy the worker via Cloudflare API (replaces npx wrangler deploy)
+  const metadata = workerMetadata(target, repository.wrangler, assetToken, previousSettings);
+  
+  // Collect all modules needed for deployment
   const modules = [...repository.contents.entries()]
     .filter(([path]) =>
       SOURCE_EXTENSIONS.has(path.slice(path.lastIndexOf("."))) &&
@@ -603,26 +602,18 @@ export async function updateWorker(
       path !== "wrangler.jsonc" &&
       path !== "package.json" &&
       !path.startsWith(`${target.assetsDirectory}/`)
-    );
-  // Get the main worker module content for deployment
-  let scriptContent = "";
-  const mainModulePath = repository.wrangler.main || "src/index.js";
-  if (repository.contents.has(mainModulePath)) {
-    scriptContent = new TextDecoder().decode(repository.contents.get(mainModulePath));
-  } else if (repository.contents.has("src/index.js")) {
-    scriptContent = new TextDecoder().decode(repository.contents.get("src/index.js"));
-  }
-
-  // Deploy the worker via Cloudflare API (replaces npx wrangler deploy)
+    )
+    .map(([path, bytes]) => ({
+      name: path,
+      content: new TextDecoder().decode(bytes),
+    }));
+  
   const deployResult = await deployWorkerViaApi(
     accountId,
     token,
     target.name,
-    scriptContent,
-    {
-      mainModule: mainModulePath,
-      assetsDirectory: target.assetsDirectory || "",
-    }
+    modules,
+    metadata
   );
   console.error("[UPDATE-CLIENT] worker deploy termine : " + JSON.stringify(deployResult));
   return {
