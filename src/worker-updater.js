@@ -513,17 +513,21 @@ async function uploadAssets(target, assets, token, fetchImpl) {
     headers: { ...cloudflareHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({ manifest }),
   }, fetchImpl);
+  // For a worker that does not exist yet, the session JWT is only an upload
+  // token (cfwau_…); the completion JWT is returned by the assets upload call.
+  let completionJwt = session.result?.jwt;
   for (const bucket of session.result?.buckets || []) {
     const form = new FormData();
     for (const hash of bucket) {
       const asset = assets.find(({ bytes }) => md5(bytes) === hash);
       if (asset) form.append(hash, base64(asset.bytes));
     }
-    await requestJson(`${CLOUDFLARE_API}/accounts/${target.accountId}/workers/assets/upload?base64=true`, {
+    const uploaded = await requestJson(`${CLOUDFLARE_API}/accounts/${target.accountId}/workers/assets/upload?base64=true`, {
       method: "POST", headers: cloudflareHeaders(session.result.jwt), body: form,
     }, fetchImpl);
+    if (uploaded.result?.jwt) completionJwt = uploaded.result.jwt;
   }
-  return session.result.jwt;
+  return completionJwt;
 }
 
 /**
@@ -542,12 +546,12 @@ async function deployWorkerViaApi(accountId, token, workerName, modules, metadat
     ...(metadata || {}),
     "main_module": moduleName,
   })], { type: "application/json" });
-  formData.append("metadata", metadataBlob);
+  formData.append("metadata", metadataBlob, "metadata");
   
   // Add all module file parts with correct content type
   for (const module of modules) {
     const moduleBlob = new Blob([module.content], { type: "application/javascript+module" });
-    formData.append(module.name, moduleBlob);
+    formData.append(module.name, moduleBlob, module.name);
   }
   
   const response = await fetch(scriptUrl, {
