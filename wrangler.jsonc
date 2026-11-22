@@ -7,7 +7,7 @@
   "compatibility_flags": ["nodejs_compat"],
 
   "vars": {
-    "CONFIGURATION": "{\"update-client-account\": \"https://github.com/Lumaris-team/update-client-account.git\", \"main-client-worker\": \"https://github.com/Lumaris-team/main-client-worker\", \"login-client-worker\": \"https://github.com/Lumaris-team/login-client-worker\"}"
+    "CONFIGURATION": "{\"update-client-account\": \"https://github.com/Lumaris-team/update-client-account.git\", \"main-client-worker\": \"https://github.com/Lumaris-team/main-client-worker\", \"authentication-client-worker\": \"https://github.com/Lumaris-team/authentication-client-worker\"}"
   },
 
   "triggers": {

@@ -573,7 +573,7 @@ async function deployWorkerViaApi(accountId, token, workerName, modules, metadat
 }
 
 // Workers that share the deployment-generated JWT signing secret.
-const JWT_AUTH_WORKERS = new Set(["login-client-worker", "main-client-worker"]);
+const JWT_AUTH_WORKERS = new Set(["authentication-client-worker", "main-client-worker"]);
 
 function injectJwtSecret(wrangler, jwtSecret) {
   return {
