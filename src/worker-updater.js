@@ -227,6 +227,17 @@ export function workerMetadata(target, wrangler, assetToken, settings) {
       secret_name: binding.secret_name,
     });
   }
+  for (const binding of wrangler.services || []) {
+    if (!binding.binding || !binding.service) {
+      throw new Error("Every service binding needs binding and service");
+    }
+    bindings.push({
+      name: binding.binding,
+      type: "service",
+      service: binding.service,
+      ...(binding.environment ? { environment: binding.environment } : {}),
+    });
+  }
   if (wrangler.ai?.binding) bindings.push({ name: wrangler.ai.binding, type: "ai" });
   if (assetToken) bindings.push({ name: "ASSETS", type: "assets" });
   const configuredNames = new Set(bindings.map(({ name }) => name));
