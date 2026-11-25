@@ -61,12 +61,14 @@ le `wrangler.jsonc` du consommateur, ex. :
 | Worker | Rôle | Binding côté consommateurs |
 |---|---|---|
 | `ed-client-worker` | API ÉcoleDirecte interne (login, QCM 2FA, notes, devoirs, emploi du temps) | `ED_CLIENT` |
+| `mega-client-worker` | Stockage MEGA interne (fichiers, état applicatif, stats) — aucun fichier utilisateur n'est chargé en mémoire, les téléchargements renvoient des URLs publiques MEGA | `MEGA_CLIENT` |
 
-Pour déployer `ed-client-worker`, ajouter son dépôt à `CONFIGURATION` :
+Pour déployer ces workers internes, ajouter leurs dépôts à `CONFIGURATION` :
 
 ```json
 {
   "ed-client-worker": "https://github.com/organisation/ed_client_worker",
+  "mega-client-worker": "https://github.com/organisation/mega_client_worker",
   "main-client-worker": "https://github.com/organisation/main-client-worker"
 }
 ```
@@ -75,7 +77,9 @@ La valeur `service` du binding doit correspondre au **nom du Worker déployé**
 (la clé JSON ou le champ `worker`). Les secrets `ED_USERNAME` / `ED_PASSWORD`
 ne sont **pas** gérés par l'updater : ils se définissent directement sur
 `ed-client-worker` (`wrangler secret put` ou dashboard → Variables) et sont
-conservés entre déploiements grâce aux bindings `inherit`.
+conservés entre déploiements grâce aux bindings `inherit`. Idem pour
+`MEGA_EMAIL` / `MEGA_PASSWORD` sur `mega-client-worker` (secret simple ou
+binding Secrets Store — les deux sont supportés par le worker).
 
 ## Limites du Worker Free
 
