@@ -48,6 +48,35 @@ spécifié. Le compte indiqué par `accountId` est prioritaire sur
 `CLOUDFLARE_ACCOUNT_ID`. Les requêtes manuelles et le cron quotidien à 02:00
 UTC utilisent le même déploiement direct.
 
+## Workers internes (service bindings)
+
+Certains Workers ne sont pas exposés publiquement : ils ne servent qu'à être
+appelés par d'autres Workers du compte via un **service binding** déclaré dans
+le `wrangler.jsonc` du consommateur, ex. :
+
+```jsonc
+"services": [{ "binding": "ED_CLIENT", "service": "ed-client-worker" }]
+```
+
+| Worker | Rôle | Binding côté consommateurs |
+|---|---|---|
+| `ed-client-worker` | API ÉcoleDirecte interne (login, QCM 2FA, notes, devoirs, emploi du temps) | `ED_CLIENT` |
+
+Pour déployer `ed-client-worker`, ajouter son dépôt à `CONFIGURATION` :
+
+```json
+{
+  "ed-client-worker": "https://github.com/organisation/ed_client_worker",
+  "main-client-worker": "https://github.com/organisation/main-client-worker"
+}
+```
+
+La valeur `service` du binding doit correspondre au **nom du Worker déployé**
+(la clé JSON ou le champ `worker`). Les secrets `ED_USERNAME` / `ED_PASSWORD`
+ne sont **pas** gérés par l'updater : ils se définissent directement sur
+`ed-client-worker` (`wrangler secret put` ou dashboard → Variables) et sont
+conservés entre déploiements grâce aux bindings `inherit`.
+
 ## Limites du Worker Free
 
 Le déploiement est volontairement borné à 100 fichiers et 5 MiB par fichier.
