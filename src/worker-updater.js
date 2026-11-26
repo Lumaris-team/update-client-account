@@ -515,7 +515,7 @@ async function syncWorkerSubdomain(target, wrangler, token, fetchImpl) {
   const enabled = wrangler.workers_dev !== false;
   const endpoint = `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.name)}/subdomain`;
   const response = await fetchImpl(endpoint, {
-    method: "PUT",
+    method: "POST",
     headers: { ...cloudflareHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
   });
