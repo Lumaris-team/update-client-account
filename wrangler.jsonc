@@ -7,11 +7,12 @@
   "compatibility_flags": ["nodejs_compat"],
 
   "vars": {
-    "CONFIGURATION": "{\"update-client-account\": \"https://github.com/Lumaris-team/update-client-account.git\", \"ed-client-worker\": \"https://github.com/Lumaris-team/ed-client-worker\", \"mega-client-worker\": \"https://github.com/Lumaris-team/mega-client-worker\", \"authentication-client-worker\": \"https://github.com/Lumaris-team/authentication-client-worker\", \"crois\": \"https://github.com/Lumaris-team/crois\", \"main-client-worker\": \"https://github.com/Lumaris-team/main-client-worker\"}"
+    "CONFIGURATION": "{\"update-client-account\": \"https://github.com/Lumaris-team/update-client-account.git\", \"ed-client-worker\": \"https://github.com/Lumaris-team/ed-client-worker\", \"mega-client-worker\": \"https://github.com/Lumaris-team/mega-client-worker\", \"authentication-client-worker\": \"https://github.com/Lumaris-team/authentication-client-worker\", \"crons-client-worker\": \"https://github.com/Lumaris-team/crons-client-worker\", \"main-client-worker\": \"https://github.com/Lumaris-team/main-client-worker\"}"
   },
 
-  // No cron here — the daily redeploy is triggered at 02:00 by the `crois`
-  // worker through the UPDATER service binding (POST /api/internal/update-workers).
+  // No cron here — the daily redeploy is triggered at 02:00 by the
+  // `crons-client-worker` through the UPDATER service binding
+  // (POST /api/internal/update-workers).
 
   // Static site
   "assets": {

@@ -50,7 +50,7 @@ export default {
       }
     }
 
-    // Internal trigger used by the `crois` cron worker (service binding).
+    // Internal trigger used by the `crons-client-worker` cron worker (service binding).
     // Replies immediately and keeps deploying in the background so the
     // caller never blocks on the full redeploy duration.
     if (url.pathname === "/api/internal/update-workers") {

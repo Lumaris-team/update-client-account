@@ -62,7 +62,7 @@ le `wrangler.jsonc` du consommateur, ex. :
 |---|---|---|
 | `ed-client-worker` | API ÉcoleDirecte interne (login, QCM 2FA, notes, devoirs, emploi du temps) | `ED_CLIENT` |
 | `mega-client-worker` | Stockage MEGA interne (fichiers, état applicatif, stats) — aucun fichier utilisateur n'est chargé en mémoire, les téléchargements renvoient des URLs publiques MEGA | `MEGA_CLIENT` |
-| `crois` | Worker cron interne : détection des devoirs ÉcoleDirecte (new/modifié/supprimé), purge D1 des tâches > 7 jours, déclenchement quotidien de l'updater à 02:00 | `ED_CLIENT`, `UPDATER`, `TIMETABLE`, `SCHOOL_DATA` |
+| `crons-client-worker` | Worker cron interne : détection des devoirs ÉcoleDirecte (new/modifié/supprimé), purge D1 des tâches > 7 jours, déclenchement quotidien de l'updater à 02:00 | `ED_CLIENT`, `UPDATER`, `TIMETABLE`, `SCHOOL_DATA` |
 
 Pour déployer ces workers internes, ajouter leurs dépôts à `CONFIGURATION` :
 
@@ -71,15 +71,15 @@ Pour déployer ces workers internes, ajouter leurs dépôts à `CONFIGURATION` :
   "ed-client-worker": "https://github.com/organisation/ed_client_worker",
   "mega-client-worker": "https://github.com/organisation/mega-client_worker",
   "authentication-client-worker": "https://github.com/organisation/authentication-client-worker",
-  "crois": "https://github.com/organisation/crois",
+  "crons-client-worker": "https://github.com/organisation/crons-client-worker",
   "main-client-worker": "https://github.com/organisation/main-client-worker"
 }
 ```
 
-L'ordre compte : `crois` doit être déployé **après** `ed-client-worker` et
+L'ordre compte : `crons-client-worker` doit être déployé **après** `ed-client-worker` et
 `update-client-account` (ses service bindings `ED_CLIENT` / `UPDATER` doivent
 exister). Le cron quotidien de l'updater a été retiré de ce worker : il est
-désormais déclenché par `crois` via `POST /api/internal/update-workers`
+désormais déclenché par `crons-client-worker` via `POST /api/internal/update-workers`
 (réponse `202` immédiate, déploiement en `ctx.waitUntil`).
 
 La valeur `service` du binding doit correspondre au **nom du Worker déployé**
