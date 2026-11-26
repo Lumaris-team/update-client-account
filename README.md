@@ -62,16 +62,25 @@ le `wrangler.jsonc` du consommateur, ex. :
 |---|---|---|
 | `ed-client-worker` | API ÉcoleDirecte interne (login, QCM 2FA, notes, devoirs, emploi du temps) | `ED_CLIENT` |
 | `mega-client-worker` | Stockage MEGA interne (fichiers, état applicatif, stats) — aucun fichier utilisateur n'est chargé en mémoire, les téléchargements renvoient des URLs publiques MEGA | `MEGA_CLIENT` |
+| `crois` | Worker cron interne : détection des devoirs ÉcoleDirecte (new/modifié/supprimé), purge D1 des tâches > 7 jours, déclenchement quotidien de l'updater à 02:00 | `ED_CLIENT`, `UPDATER`, `TIMETABLE`, `SCHOOL_DATA` |
 
 Pour déployer ces workers internes, ajouter leurs dépôts à `CONFIGURATION` :
 
 ```json
 {
   "ed-client-worker": "https://github.com/organisation/ed_client_worker",
-  "mega-client-worker": "https://github.com/organisation/mega_client_worker",
+  "mega-client-worker": "https://github.com/organisation/mega-client_worker",
+  "authentication-client-worker": "https://github.com/organisation/authentication-client-worker",
+  "crois": "https://github.com/organisation/crois",
   "main-client-worker": "https://github.com/organisation/main-client-worker"
 }
 ```
+
+L'ordre compte : `crois` doit être déployé **après** `ed-client-worker` et
+`update-client-account` (ses service bindings `ED_CLIENT` / `UPDATER` doivent
+exister). Le cron quotidien de l'updater a été retiré de ce worker : il est
+désormais déclenché par `crois` via `POST /api/internal/update-workers`
+(réponse `202` immédiate, déploiement en `ctx.waitUntil`).
 
 La valeur `service` du binding doit correspondre au **nom du Worker déployé**
 (la clé JSON ou le champ `worker`). Les secrets `ED_USERNAME` / `ED_PASSWORD`
@@ -88,10 +97,15 @@ Cela évite de dépasser rapidement les limites de sous-requêtes et de mémoire
 d'un Worker Free. Pour un dépôt plus important, il faut réduire les fichiers
 déployés ou utiliser un pipeline externe.
 
-Les bases D1 et Workflows référencés dans `wrangler.jsonc` doivent déjà exister
-dans le compte Cloudflare cible. Pour une base D1 déclarée avec un
-`database_name` et un identifiant placeholder `__D1_ID_*__`, l'updater récupère
-automatiquement l'ID correspondant dans le compte cible. Les dépendances npm sont téléchargées depuis esm.sh pendant le déploiement
+Les bases D1 et Workflows référencés dans `wrangler.jsonc` sont gérés
+automatiquement : un Worker absent du compte est **créé** par le déploiement
+(`PUT /workers/scripts`), une base D1 déclarée avec un `database_name` et un
+identifiant placeholder `__D1_ID_*__` est **créée si elle n'existe pas** (ses
+tables restent à créer via les migrations du dépôt), et le sous-domaine
+`workers.dev` de chaque script est synchronisé avec `workers_dev` du
+`wrangler.jsonc` — `false` coupe bien l'URL publique des workers internes.
+Les Workflows doivent déjà exister dans le compte Cloudflare cible. Les
+dépendances npm sont téléchargées depuis esm.sh pendant le déploiement
 pour remplacer les imports bare que l'API Workers ne peut pas résoudre seule.
 Les secrets ne sont jamais lus
 depuis GitHub : ils doivent être fournis séparément comme bindings Cloudflare.

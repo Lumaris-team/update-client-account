@@ -50,6 +50,31 @@ export default {
       }
     }
 
+    // Internal trigger used by the `crois` cron worker (service binding).
+    // Replies immediately and keeps deploying in the background so the
+    // caller never blocks on the full redeploy duration.
+    if (url.pathname === "/api/internal/update-workers") {
+      if (method !== "POST") {
+        return new Response(JSON.stringify({ error: "Method not allowed" }), {
+          status: 405,
+          headers: { ...corsHeaders, Allow: "POST" },
+        });
+      }
+      ctx.waitUntil(
+        updateWorkers(env.CONFIGURATION, {
+          token: env.CLOUDFLARE_ACCOUNT_TOKEN,
+          githubToken: env.GITHUB_TOKEN,
+          accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        }).catch((error) => {
+          console.error("INTERNAL WORKER UPDATE ERROR:", error?.stack || error);
+        })
+      );
+      return new Response(JSON.stringify({ accepted: true }), {
+        status: 202,
+        headers: corsHeaders,
+      });
+    }
+
     // =========================
     // 📶 MAIN API
     // =========================

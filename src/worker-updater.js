@@ -457,17 +457,33 @@ async function resolveD1Bindings(wrangler, target, token, fetchImpl) {
     fetchImpl
   );
   const databases = response.result || [];
-  return {
-    ...wrangler,
-    d1_databases: bindings.map((binding) => {
-      if (binding.database_id && !binding.database_id.startsWith("__D1_ID_")) return binding;
-      const database = databases.find((item) => item.name === binding.database_name);
+  const resolved = [];
+  for (const binding of bindings) {
+    if (binding.database_id && !binding.database_id.startsWith("__D1_ID_")) {
+      resolved.push(binding);
+      continue;
+    }
+    let database = databases.find((item) => item.name === binding.database_name);
+    if (!database?.uuid) {
+      // Missing database: create it so a brand-new worker can deploy.
+      // Tables still have to be created by applying the repo migrations.
+      const created = await requestJson(
+        `${CLOUDFLARE_API}/accounts/${target.accountId}/d1/database`,
+        {
+          method: "POST",
+          headers: { ...cloudflareHeaders(token), "Content-Type": "application/json" },
+          body: JSON.stringify({ name: binding.database_name }),
+        },
+        fetchImpl
+      );
+      database = created.result;
       if (!database?.uuid) {
-        throw new Error(`D1 database '${binding.database_name}' was not found`);
+        throw new Error(`D1 database '${binding.database_name}' could not be created`);
       }
-      return { ...binding, database_id: database.uuid };
-    }),
-  };
+    }
+    resolved.push({ ...binding, database_id: database.uuid });
+  }
+  return { ...wrangler, d1_databases: resolved };
 }
 
 function base64(bytes) {
@@ -490,6 +506,23 @@ async function workerExists(target, token, fetchImpl) {
   throw new Error(
     `Cannot inspect Worker ${target.worker} (${response.status}): ${body.slice(0, 300)}`
   );
+}
+
+// Keeps the per-script workers.dev route in sync with wrangler.workers_dev.
+// Without this, a worker created by a bare PUT upload keeps whatever
+// subdomain state Cloudflare defaults to — ed/mega must stay unreachable.
+async function syncWorkerSubdomain(target, wrangler, token, fetchImpl) {
+  const enabled = wrangler.workers_dev !== false;
+  const endpoint = `${CLOUDFLARE_API}/accounts/${target.accountId}/workers/scripts/${encodeURIComponent(target.name)}/subdomain`;
+  const response = await fetchImpl(endpoint, {
+    method: "PUT",
+    headers: { ...cloudflareHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Cannot sync workers.dev subdomain for ${target.worker} (${response.status}): ${body.slice(0, 300)}`);
+  }
 }
 
 async function enableWorkerSubdomain(target, token, fetchImpl) {
@@ -649,6 +682,7 @@ export async function updateWorker(
     modules,
     metadata
   );
+  await syncWorkerSubdomain(target, repository.wrangler, token, fetchImpl);
   console.error("[UPDATE-CLIENT] worker deploy termine : " + JSON.stringify(deployResult));
   return {
     name: target.name,
