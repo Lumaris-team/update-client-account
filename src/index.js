@@ -15,7 +15,15 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
+    // Both deploy triggers are internal-only: they are reached exclusively
+    // through the UPDATER service binding (hostname "updater.internal").
+    // update-client-account has workers_dev enabled, so without this check
+    // anyone could POST a redeploy of every worker — which also rotates the
+    // shared JWT secret and logs out all users.
+    const isInternal = url.hostname === "updater.internal";
+
     if (url.pathname === "/api/update-workers") {
+      if (!isInternal) return new Response("Not found", { status: 404 });
       if (method !== "POST") {
         return new Response(JSON.stringify({ error: "Method not allowed" }), {
           status: 405,
@@ -54,6 +62,7 @@ export default {
     // Replies immediately and keeps deploying in the background so the
     // caller never blocks on the full redeploy duration.
     if (url.pathname === "/api/internal/update-workers") {
+      if (!isInternal) return new Response("Not found", { status: 404 });
       if (method !== "POST") {
         return new Response(JSON.stringify({ error: "Method not allowed" }), {
           status: 405,
